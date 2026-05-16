@@ -1,0 +1,52 @@
+name: fusionsearch
+
+services:
+  fusionsearch-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fusionsearch-mcp
+    restart: unless-stopped
+    ports:
+      - "${FUSIONSEARCH_PORT:-1666}:1666"
+    environment:
+      PORT: "1666"
+      RUNTIME_CONFIG_PATH: /app/config/runtime.json
+      SEARCH_ENDPOINT: "${SEARCH_ENDPOINT:-https://echocq-libresearch.hf.space/search}"
+      SEARCH_SH_CHAT_ENDPOINT: "${SEARCH_SH_CHAT_ENDPOINT:-}"
+      SEARCH_SH_API_KEY: "${SEARCH_SH_API_KEY:-}"
+      ADMIN_AUTH_ENABLED: "${ADMIN_AUTH_ENABLED:-false}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      MCP_AUTH_TOKEN: "${MCP_AUTH_TOKEN:-}"
+      HF_ENDPOINT: "${HF_ENDPOINT:-https://huggingface.co}"
+      HF_SPACE_ID: "${HF_SPACE_ID:-}"
+      HF_WRITE_TOKEN: "${HF_WRITE_TOKEN:-}"
+      GUDA_BASE_URL: "${GUDA_BASE_URL:-https://code.guda.studio}"
+      GUDA_API_KEY: "${GUDA_API_KEY:-}"
+      GROK_API_URL: "${GROK_API_URL:-}"
+      GROK_API_KEY: "${GROK_API_KEY:-}"
+      GROK_MODEL: "${GROK_MODEL:-grok-4.20-beta}"
+      GROK_SYSTEM_PROMPT: "${GROK_SYSTEM_PROMPT:-}"
+      TAVILY_ENABLED: "${TAVILY_ENABLED:-true}"
+      TAVILY_API_URL: "${TAVILY_API_URL:-https://api.tavily.com}"
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
+      FIRECRAWL_API_URL: "${FIRECRAWL_API_URL:-https://api.firecrawl.dev/v2}"
+      FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY:-}"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:1666/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

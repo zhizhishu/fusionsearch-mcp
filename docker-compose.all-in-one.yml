@@ -1,0 +1,81 @@
+name: fusionsearch-all-in-one
+
+services:
+  gateway:
+    image: nginx:alpine
+    container_name: fusionsearch-gateway
+    restart: unless-stopped
+    ports:
+      - "${FUSIONSEARCH_PORT:-1666}:80"
+    volumes:
+      - ./deploy/nginx/all-in-one.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - fusionsearch-mcp
+      - libresearch
+      - search2api
+
+  fusionsearch-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fusionsearch-mcp
+    restart: unless-stopped
+    environment:
+      PORT: "1666"
+      RUNTIME_CONFIG_PATH: /app/config/runtime.json
+      SEARCH_ENDPOINT: "http://libresearch:8080/search"
+      SEARCH_SH_CHAT_ENDPOINT: "http://search2api:8000/v1/chat/completions"
+      SEARCH_SH_API_KEY: "${API_MASTER_KEY:-}"
+      ADMIN_AUTH_ENABLED: "${ADMIN_AUTH_ENABLED:-false}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      MCP_AUTH_TOKEN: "${MCP_AUTH_TOKEN:-}"
+      HF_ENDPOINT: "${HF_ENDPOINT:-https://huggingface.co}"
+      HF_SPACE_ID: "${HF_SPACE_ID:-}"
+      HF_WRITE_TOKEN: "${HF_WRITE_TOKEN:-}"
+      GUDA_BASE_URL: "${GUDA_BASE_URL:-https://code.guda.studio}"
+      GUDA_API_KEY: "${GUDA_API_KEY:-}"
+      GROK_API_URL: "${GROK_API_URL:-}"
+      GROK_API_KEY: "${GROK_API_KEY:-}"
+      GROK_MODEL: "${GROK_MODEL:-grok-4.20-beta}"
+      GROK_SYSTEM_PROMPT: "${GROK_SYSTEM_PROMPT:-}"
+      TAVILY_ENABLED: "${TAVILY_ENABLED:-true}"
+      TAVILY_API_URL: "${TAVILY_API_URL:-https://api.tavily.com}"
+      TAVILY_API_KEY: "${TAVILY_API_KEY:-}"
+      FIRECRAWL_API_URL: "${FIRECRAWL_API_URL:-https://api.firecrawl.dev/v2}"
+      FIRECRAWL_API_KEY: "${FIRECRAWL_API_KEY:-}"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+
+  libresearch:
+    image: libregroup/libresearch:latest
+    container_name: fusionsearch-libresearch
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: "http://localhost:${FUSIONSEARCH_PORT:-1666}/"
+      SEARXNG_PORT: "8080"
+      GRANIAN_HOST: "0.0.0.0"
+      GRANIAN_PROCESS_NAME: "${GRANIAN_PROCESS_NAME:-fusionsearch-libre}"
+      GRANIAN_WORKERS: "${GRANIAN_WORKERS:-1}"
+      GRANIAN_BLOCKING_THREADS: "${GRANIAN_BLOCKING_THREADS:-4}"
+      UWSGI_WORKERS: "${UWSGI_WORKERS:-1}"
+      UWSGI_THREADS: "${UWSGI_THREADS:-4}"
+      TZ: "${TZ:-Asia/Shanghai}"
+    volumes:
+      - ./deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - libresearch-cache:/var/cache/searxng
+
+  search2api:
+    build:
+      context: ./services/search2api
+      dockerfile: Dockerfile
+    container_name: fusionsearch-search2api
+    restart: unless-stopped
+    environment:
+      SEARCH_SH_COOKIE: "${SEARCH_SH_COOKIE:-}"
+      SEARCH_SH_USER_AGENT: "${SEARCH_SH_USER_AGENT:-}"
+      API_MASTER_KEY: "${API_MASTER_KEY:-}"
+
+volumes:
+  libresearch-cache:
