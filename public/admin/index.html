@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FusionSearch 设置</title>
+    <link rel="icon" href="/admin/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/admin/assets/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="page-head">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true">
+            <path class="mark-line" d="M50 15 C70 15 85 30 85 50 C85 65 75 75 70 80 M50 15 C30 15 15 30 15 50 C15 65 25 75 30 80" />
+            <path class="mark-line" d="M30 80 Q30 90 20 90" />
+            <path class="mark-line" d="M43 77 Q43 90 38 90" />
+            <path class="mark-line" d="M57 77 Q57 90 62 90" />
+            <path class="mark-line" d="M70 80 Q70 90 80 90" />
+          </svg>
+          <div>
+            <h1>FusionSearch</h1>
+            <p>配置中心</p>
+          </div>
+        </div>
+        <div class="head-actions">
+          <span class="status-pill" id="runtimeStatus">读取中</span>
+          <button class="soft-button head-button" id="logoutAdmin" hidden>退出</button>
+          <button class="icon-button" id="refreshConfig" title="刷新" aria-label="刷新">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.1 6.6M3 12A9 9 0 0 1 18.1 5.4M18 3v5h-5M6 21v-5h5" /></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="login-panel" id="loginPanel" hidden>
+        <div class="panel-title">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
+          <h2>管理登录</h2>
+        </div>
+        <div class="test-row">
+          <input id="adminTokenInput" type="password" autocomplete="current-password" placeholder="Admin Token" />
+          <button class="primary-button" id="loginAdmin">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 3v18" /></svg>
+            登录
+          </button>
+        </div>
+        <p class="field-note" id="loginHint">Public Space 建议开启 Admin Token。</p>
+      </section>
+
+      <div class="workbench">
+        <nav class="side-rail" aria-label="主配置区">
+          <div class="rail-title">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <path d="M50 15 C70 15 85 30 85 50 C85 65 75 75 70 80 M50 15 C30 15 15 30 15 50 C15 65 25 75 30 80" />
+              <path d="M30 80 Q30 90 20 90M43 77 Q43 90 38 90M57 77 Q57 90 62 90M70 80 Q70 90 80 90" />
+            </svg>
+            <span>Admin</span>
+          </div>
+          <a class="rail-item active" href="#sources:libresearch" data-group="sources" aria-current="page">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+            <span>搜索源</span>
+          </a>
+          <a class="rail-item" href="#fusion:grok" data-group="fusion">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.5 7l2.5 9M15.5 7 13 16M10 5h4" /></svg>
+            <span>融合能力</span>
+          </a>
+          <a class="rail-item" href="#mcp:full" data-group="mcp">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg>
+            <span>MCP</span>
+          </a>
+          <a class="rail-item" href="#deploy:docker" data-group="deploy">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM8 7V4h8v3M8 17v3M16 17v3" /></svg>
+            <span>部署</span>
+          </a>
+          <a class="rail-item" href="#security:admin" data-group="security">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
+            <span>安全</span>
+          </a>
+          <a class="rail-item" href="#tests:search" data-group="tests">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7" /></svg>
+            <span>测试</span>
+          </a>
+          <a class="rail-item" href="#status:runtime" data-group="status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4" /></svg>
+            <span>状态</span>
+          </a>
+        </nav>
+
+        <main class="content-shell">
+          <aside class="sub-rail" aria-label="内容区副栏">
+            <div class="subnav-group active" data-subnav-group="sources">
+              <button class="subnav-item active" type="button" data-subview="libresearch">LibreSearch</button>
+              <button class="subnav-item" type="button" data-subview="search2api">Search-2api</button>
+            </div>
+            <div class="subnav-group" data-subnav-group="fusion" hidden>
+              <button class="subnav-item active" type="button" data-subview="grok">Grok / GuDa</button>
+              <button class="subnav-item" type="button" data-subview="prompt">System Prompt</button>
+              <button class="subnav-item" type="button" data-subview="tavily">Tavily</button>
+              <button class="subnav-item" type="button" data-subview="firecrawl">Firecrawl</button>
+            </div>
+            <div class="subnav-group" data-subnav-group="mcp" hidden>
+              <button class="subnav-item active" type="button" data-subview="full">完整 MCP</button>
+              <button class="subnav-item" type="button" data-subview="libresearch-mcp">LibreSearch MCP</button>
+              <button class="subnav-item" type="button" data-subview="fusion-mcp">Fusion MCP</button>
+            </div>
+            <div class="subnav-group" data-subnav-group="deploy" hidden>
+              <button class="subnav-item active" type="button" data-subview="docker">服务器 Docker</button>
+              <button class="subnav-item" type="button" data-subview="hf">Hugging Face Space</button>
+              <button class="subnav-item" type="button" data-subview="routes">路由规则</button>
+            </div>
+            <div class="subnav-group" data-subnav-group="security" hidden>
+              <button class="subnav-item active" type="button" data-subview="admin">Admin Token</button>
+              <button class="subnav-item" type="button" data-subview="mcp-token">MCP Token</button>
+              <button class="subnav-item" type="button" data-subview="hf-secrets">HF Secrets</button>
+              <button class="subnav-item" type="button" data-subview="hf-oauth">HF OAuth</button>
+            </div>
+            <div class="subnav-group" data-subnav-group="tests" hidden>
+              <button class="subnav-item active" type="button" data-subview="search">搜索测试</button>
+              <button class="subnav-item" type="button" data-subview="fusion-test">融合测试</button>
+              <button class="subnav-item" type="button" data-subview="fetch">抓取测试</button>
+            </div>
+            <div class="subnav-group" data-subnav-group="status" hidden>
+              <button class="subnav-item active" type="button" data-subview="runtime">运行状态</button>
+            </div>
+          </aside>
+
+          <section class="panel-stage">
+            <section class="panel view-panel active-panel" data-group-panel="sources" data-view-panel="libresearch">
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.2-4.2M11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z" /></svg>
+                <h2>LibreSearch</h2>
+              </div>
+              <label class="field">
+                <span>搜索接口</span>
+                <input id="searchEndpoint" type="url" autocomplete="off" spellcheck="false" />
+              </label>
+              <div class="field-grid">
+                <label class="field">
+                  <span>分类</span>
+                  <select id="categories">
+                    <option value="general">general</option>
+                    <option value="images">images</option>
+                    <option value="news">news</option>
+                    <option value="videos">videos</option>
+                    <option value="it">it</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>语言</span>
+                  <input id="language" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>安全搜索</span>
+                  <select id="safesearch">
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>时间范围</span>
+                  <select id="timeRange">
+                    <option value="">none</option>
+                    <option value="day">day</option>
+                    <option value="week">week</option>
+                    <option value="month">month</option>
+                    <option value="year">year</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="sources" data-view-panel="search2api" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h10M7 12h7M21 12c0 4.4-4 8-9 8a10 10 0 0 1-4-.8L3 20l1.2-4A7.2 7.2 0 0 1 3 12c0-4.4 4-8 9-8s9 3.6 9 8Z" /></svg>
+                <h2>Search-2api</h2>
+              </div>
+              <div class="kv-list compact">
+                <div><span>来源项目</span><strong id="search2apiProjectUrl">https://github.com/lza6/Search-2api</strong></div>
+                <div><span>Base URL</span><strong id="search2apiBaseUrl">-</strong></div>
+                <div><span>上游状态</span><strong id="search2apiUpstreamState">未检查</strong></div>
+                <div><span>接口状态</span><strong id="search2apiRuntimeState">未检查</strong></div>
+              </div>
+              <label class="field">
+                <span>Chat Completions</span>
+                <input id="searchShEndpoint" type="url" autocomplete="off" spellcheck="false" />
+              </label>
+              <label class="field">
+                <span>Bearer Key</span>
+                <input id="searchShApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+              </label>
+              <label class="check-row">
+                <input id="clearSearchShApiKey" type="checkbox" />
+                <span>清空已保存密钥</span>
+              </label>
+              <div class="test-row">
+                <button class="soft-button" id="auditSearch2api">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4" /></svg>
+                  维护检查
+                </button>
+                <span class="inline-hint" id="search2apiStatusHint">检查仓库新鲜度与运行接口</span>
+              </div>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="fusion" data-view-panel="grok" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.5 7l2.5 9M15.5 7 13 16M10 5h4" /></svg>
+                <h2>Grok / GuDa</h2>
+              </div>
+              <label class="field">
+                <span>GuDa Base URL</span>
+                <input id="gudaBaseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://code.guda.studio" />
+              </label>
+              <label class="field">
+                <span>GuDa API Key</span>
+                <input id="gudaApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+              </label>
+              <label class="check-row">
+                <input id="clearGudaApiKey" type="checkbox" />
+                <span>清空 GuDa Key</span>
+              </label>
+              <label class="field">
+                <span>Grok API URL</span>
+                <input id="grokApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="可留空，由 GuDa 派生" />
+              </label>
+              <label class="field">
+                <span>Grok API Key</span>
+                <input id="grokApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+              </label>
+              <label class="check-row">
+                <input id="clearGrokApiKey" type="checkbox" />
+                <span>清空 Grok Key</span>
+              </label>
+              <label class="field">
+                <span>默认模型</span>
+                <input id="grokModel" type="text" autocomplete="off" />
+              </label>
+              <div class="test-row">
+                <button class="soft-button" id="listGrokModels">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+                  模型
+                </button>
+                <button class="primary-button" id="testGrok">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+                  Grok
+                </button>
+              </div>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="fusion" data-view-panel="prompt" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h16" /></svg>
+                <h2>Grok System Prompt</h2>
+              </div>
+              <p class="panel-note">只注入给 Grok / OpenAI-compatible chat，用来控制证据标准、中文输出和引用规则。</p>
+              <label class="field span-2">
+                <span>System Prompt</span>
+                <textarea id="grokSystemPrompt" spellcheck="false" rows="12"></textarea>
+              </label>
+              <button class="soft-button" id="resetGrokPrompt" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
+                恢复默认
+              </button>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="fusion" data-view-panel="tavily" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4ZM4 12l8 4 8-4M4 17l8 4 8-4" /></svg>
+                <h2>Tavily</h2>
+              </div>
+              <label class="check-row">
+                <input id="tavilyEnabled" type="checkbox" />
+                <span>启用 Tavily</span>
+              </label>
+              <label class="field">
+                <span>Tavily API URL</span>
+                <input id="tavilyApiUrl" type="url" autocomplete="off" spellcheck="false" />
+              </label>
+              <label class="field">
+                <span>Tavily API Key</span>
+                <input id="tavilyApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+              </label>
+              <label class="check-row">
+                <input id="clearTavilyApiKey" type="checkbox" />
+                <span>清空 Tavily Key</span>
+              </label>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="fusion" data-view-panel="firecrawl" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 6 12h5l-1 10 8-12h-5l0-8Z" /></svg>
+                <h2>Firecrawl</h2>
+              </div>
+              <p class="panel-note">网页抓取托底，Tavily Extract 失败时使用。</p>
+              <label class="field">
+                <span>Firecrawl API URL</span>
+                <input id="firecrawlApiUrl" type="url" autocomplete="off" spellcheck="false" />
+              </label>
+              <label class="field">
+                <span>Firecrawl API Key</span>
+                <input id="firecrawlApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+              </label>
+              <label class="check-row">
+                <input id="clearFirecrawlApiKey" type="checkbox" />
+                <span>清空 Firecrawl Key</span>
+              </label>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="mcp" data-view-panel="full" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg><h2>完整 MCP</h2></div>
+              <div class="kv-list compact">
+                <div><span>入口</span><strong>/mcp</strong></div>
+                <div><span>状态</span><strong>跟随运行检查</strong></div>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="mcp" data-view-panel="libresearch-mcp" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg><h2>LibreSearch MCP</h2></div>
+              <div class="kv-list compact">
+                <div><span>入口</span><strong>/libresearch/mcp</strong></div>
+                <div><span>工具</span><strong>libresearch_*</strong></div>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="mcp" data-view-panel="fusion-mcp" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M6 16h12" /></svg><h2>Fusion MCP</h2></div>
+              <div class="kv-list compact">
+                <div><span>入口</span><strong>/fusion/mcp</strong></div>
+                <div><span>工具</span><strong>fusionsearch_*</strong></div>
+              </div>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="deploy" data-view-panel="docker" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v10H4zM8 7V4h8v3M8 17v3M16 17v3" /></svg><h2>服务器 Docker</h2></div>
+              <div class="kv-list compact">
+                <div><span>配置文件</span><strong id="configPathMirror">随运行状态同步</strong></div>
+                <div><span>服务</span><strong>node server</strong></div>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="deploy" data-view-panel="hf" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 8l8 5 8-5-8-5ZM4 14l8 5 8-5" /></svg><h2>Hugging Face Space</h2></div>
+              <label class="field">
+                <span>Space URL</span>
+                <input type="url" placeholder="https://huggingface.co/spaces/..." disabled />
+              </label>
+            </section>
+            <section class="panel view-panel" data-group-panel="deploy" data-view-panel="routes" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16M18 4v16M6 8h8a4 4 0 0 1 0 8H6" /></svg><h2>路由规则</h2></div>
+              <div class="kv-list compact">
+                <div><span>Admin</span><strong>/admin</strong></div>
+                <div><span>API</span><strong>/api/admin/*</strong></div>
+                <div><span>MCP</span><strong>/mcp</strong></div>
+              </div>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="security" data-view-panel="admin" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg><h2>Admin Token</h2></div>
+              <div class="kv-list compact">
+                <div><span>状态</span><strong id="adminAuthState">-</strong></div>
+                <div><span>范围</span><strong>/admin 与 /api/admin/*</strong></div>
+                <div><span>来源</span><strong id="adminEnvState">-</strong></div>
+              </div>
+              <label class="field">
+                <span>当前 Admin Token</span>
+                <input id="currentAdminToken" type="password" autocomplete="current-password" placeholder="修改安全设置时需要确认" />
+              </label>
+              <label class="field">
+                <span>新的 Admin Token</span>
+                <input id="newAdminToken" type="password" autocomplete="new-password" placeholder="至少 16 位，留空则不改" />
+              </label>
+              <label class="check-row">
+                <input id="rotateSessionSecret" type="checkbox" checked />
+                <span>同时轮换 Session Secret，让旧登录立即失效</span>
+              </label>
+              <div class="test-row">
+                <button class="primary-button" id="rotateSecurity">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
+                  更新安全设置
+                </button>
+                <span class="inline-hint" id="securityHint">Token 不会回显；HF 重启持久化需同步 Settings Secrets</span>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="security" data-view-panel="mcp-token" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg><h2>MCP Token</h2></div>
+              <div class="kv-list compact">
+                <div><span>状态</span><strong id="mcpAuthState">-</strong></div>
+                <div><span>范围</span><strong>/mcp / /libresearch/mcp / /fusion/mcp</strong></div>
+                <div><span>来源</span><strong id="mcpEnvState">-</strong></div>
+              </div>
+              <label class="field">
+                <span>当前 Admin Token</span>
+                <input id="currentMcpAdminToken" type="password" autocomplete="current-password" placeholder="修改 MCP Token 时需要确认" />
+              </label>
+              <label class="field">
+                <span>新的 MCP Token</span>
+                <input id="newMcpAuthToken" type="password" autocomplete="new-password" placeholder="至少 16 位，留空则不改" />
+              </label>
+              <label class="check-row">
+                <input id="clearMcpAuthToken" type="checkbox" />
+                <span>清空 MCP Token，关闭 MCP 鉴权</span>
+              </label>
+              <div class="test-row">
+                <button class="primary-button" id="rotateMcpSecurity">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
+                  更新 MCP Token
+                </button>
+                <span class="inline-hint">客户端需要同步替换 Bearer Token</span>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="security" data-view-panel="hf-secrets" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
+                <h2>Hugging Face Secrets</h2>
+              </div>
+              <p class="panel-note">只填写需要替换的值。已有 Secret 不会回显，保存后重启 Space 才能让运行中容器读取新值。</p>
+              <div class="kv-list compact">
+                <div><span>Space</span><strong id="hfSpaceId">-</strong></div>
+                <div><span>写入令牌</span><strong id="hfWriteState">-</strong></div>
+                <div><span>已知 Secret</span><strong id="hfSecretCount">-</strong></div>
+              </div>
+              <label class="field">
+                <span>一次性 HF Write Token</span>
+                <input id="hfOneTimeToken" type="password" autocomplete="new-password" placeholder="如果 HF_WRITE_TOKEN 已配置，这里可留空" />
+              </label>
+              <div class="hf-secret-grid" id="hfSecretFields"></div>
+              <div class="test-row">
+                <button class="soft-button" id="loadHfSecrets" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
+                  读取状态
+                </button>
+                <button class="primary-button" id="saveHfSecrets" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
+                  保存 Secrets
+                </button>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="security" data-view-panel="hf-oauth" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" /></svg><h2>HF OAuth</h2></div>
+              <label class="field">
+                <span>OAuth Callback</span>
+                <input type="url" placeholder="/auth/huggingface/callback" disabled />
+              </label>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="tests" data-view-panel="search" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg><h2>搜索测试</h2></div>
+              <div class="test-row">
+                <input id="testQuery" type="text" value="test" autocomplete="off" />
+                <button class="primary-button" id="testSearch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>搜索</button>
+              </div>
+              <div class="test-row">
+                <input id="testPrompt" type="text" value="一句话介绍 libresearch" autocomplete="off" />
+                <button class="soft-button" id="testSearchSh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h10M7 12h7M21 12c0 4.4-4 8-9 8a10 10 0 0 1-4-.8L3 20l1.2-4A7.2 7.2 0 0 1 3 12c0-4.4 4-8 9-8s9 3.6 9 8Z" /></svg>Chat</button>
+              </div>
+              <pre id="testOutput" class="output">等待测试</pre>
+            </section>
+            <section class="panel view-panel" data-group-panel="tests" data-view-panel="fusion-test" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M6 16h12" /></svg><h2>融合测试</h2></div>
+              <div class="test-row">
+                <input id="testGrokQuery" type="text" value="latest FastAPI release notes" autocomplete="off" />
+                <button class="primary-button" id="testGrokFromPreview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M6 16h12" /></svg>Fusion</button>
+              </div>
+            </section>
+            <section class="panel view-panel" data-group-panel="tests" data-view-panel="fetch" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7" /></svg><h2>抓取测试</h2></div>
+              <div class="test-row">
+                <input id="testFetchUrl" type="url" value="https://example.com" autocomplete="off" />
+                <button class="soft-button" id="testFusionFetch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7" /></svg>Fetch</button>
+              </div>
+              <div class="test-row">
+                <input id="testMapUrl" type="url" value="https://example.com" autocomplete="off" />
+                <button class="soft-button" id="testFusionMap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v6H6zM6 14h5v6H6zM13 14h5v6h-5z" /></svg>Map</button>
+              </div>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="status" data-view-panel="runtime" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" /></svg>
+                <h2>运行状态</h2>
+              </div>
+              <div class="kv-list">
+                <div><span>MCP</span><strong id="mcpEndpoint">-</strong></div>
+                <div><span>Health</span><strong id="healthState">-</strong></div>
+                <div><span>配置文件</span><strong id="configPath">-</strong></div>
+                <div><span>Search-2api</span><strong id="keyState">-</strong></div>
+                <div><span>Fusion Key</span><strong id="fusionKeyState">-</strong></div>
+              </div>
+              <button class="soft-button" id="checkRuntime"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>检查</button>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <div>
+        <strong>运行配置</strong>
+        <span id="saveHint">未保存的修改会在重启前失效</span>
+      </div>
+      <button class="primary-button" id="saveConfig">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
+        保存
+      </button>
+    </div>
+
+    <script src="/admin/assets/app.js" type="module"></script>
+  </body>
+</html>
