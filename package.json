@@ -1,0 +1,26 @@
+{
+  "name": "fusionsearch-mcp",
+  "version": "1.0.0",
+  "description": "FusionSearch MCP 搜索工具服务，融合 LibreSearch、Grok、Tavily、Firecrawl 与 Search-2api",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "deploy": "npm install && node src/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "search",
+    "sse",
+    "cherry-studio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "zod": "^3.25.76"
+  }
+}

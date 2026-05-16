@@ -1,0 +1,11 @@
+node_modules/
+Search-2api/
+logs/
+config/runtime.json
+config/runtime.json.tmp
+npm-debug.log
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]

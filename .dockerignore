@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+logs/*
+config/runtime.json
+config/runtime.json.tmp
+.git
+.gitignore
+TASK_LOG.md
+HF_MIGRATION_PLAN.md
+Search-2api
