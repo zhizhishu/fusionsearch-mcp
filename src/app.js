@@ -90,8 +90,6 @@ const HF_SECRET_OPTIONS = [
   { key: 'API_MASTER_KEY', label: 'Search-2api bearer token', multiline: false },
   { key: 'SEARCH_SH_API_KEY', label: 'External Search-2api bearer token', multiline: false },
   { key: 'SEARCH_SH_CHAT_ENDPOINT', label: 'Search-2api chat endpoint', multiline: false },
-  { key: 'GUDA_BASE_URL', label: 'GuDa base URL', multiline: false },
-  { key: 'GUDA_API_KEY', label: 'GuDa API key', multiline: false },
   { key: 'GROK_API_URL', label: 'Grok/OpenAI-compatible URL', multiline: false },
   { key: 'GROK_API_KEY', label: 'Grok API key', multiline: false },
   { key: 'GROK_MODEL', label: 'Grok model', multiline: false },
@@ -3361,7 +3359,8 @@ export function createApp(userConfig = {}) {
         },
         instructions:
           `This endpoint exposes the "${profile}" FusionSearch MCP profile. ` +
-          'Preferred tools are "smart_research", "smart_fetch", "fusion_status", "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
+          'Use /mcp as the primary unified FusionSearch MCP entry. It combines five provider layers: LibreSearch, Search-2api, Grok/OpenAI-compatible, Tavily, and Firecrawl. ' +
+          'Preferred smart tools are "smart_research", "smart_fetch", and "fusion_status"; provider tools are "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
           'POST initialize/call requests to / or /mcp (Streamable HTTP). Legacy SSE clients connect to /sse (or /mcp/sse) and POST to /messages (or /mcp/messages) with the provided sessionId.'
       }
     );

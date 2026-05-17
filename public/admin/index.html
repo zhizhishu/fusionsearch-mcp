@@ -100,9 +100,7 @@
               <button class="subnav-item" type="button" data-subview="firecrawl">Firecrawl</button>
             </div>
             <div class="subnav-group" data-subnav-group="mcp" hidden>
-              <button class="subnav-item active" type="button" data-subview="full">完整 MCP</button>
-              <button class="subnav-item" type="button" data-subview="libresearch-mcp">LibreSearch MCP</button>
-              <button class="subnav-item" type="button" data-subview="fusion-mcp">Fusion MCP</button>
+              <button class="subnav-item active" type="button" data-subview="full">Fusion MCP</button>
             </div>
             <div class="subnav-group" data-subnav-group="deploy" hidden>
               <button class="subnav-item active" type="button" data-subview="docker">服务器 Docker</button>
@@ -228,19 +226,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.5 7l2.5 9M15.5 7 13 16M10 5h4" /></svg>
                 <h2>Grok API</h2>
               </div>
-              <p class="panel-note">填写 OpenAI-compatible Grok 接口。GuDa 只是可选统一入口；如果直接有 Grok API URL 和 Key，可只填下面两项。</p>
-              <label class="field">
-                <span>GuDa Base URL（可选）</span>
-                <input id="gudaBaseUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://code.guda.studio" />
-              </label>
-              <label class="field">
-                <span>GuDa API Key</span>
-                <input id="gudaApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-              </label>
-              <label class="check-row">
-                <input id="clearGudaApiKey" type="checkbox" />
-                <span>清空 GuDa Key</span>
-              </label>
+              <p class="panel-note">填写 Grok 或任意 OpenAI-compatible `/v1` 接口。FusionSearch 会把它作为 AI 搜索与总结层，配合 LibreSearch、Search-2api、Tavily 和 Firecrawl 取证。</p>
               <label class="field">
                 <span>Grok API URL</span>
                 <input id="grokApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/v1" />
@@ -386,24 +372,13 @@
             </section>
 
             <section class="panel view-panel" data-group-panel="mcp" data-view-panel="full" hidden>
-              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg><h2>完整 MCP</h2></div>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg><h2>Fusion MCP</h2></div>
+              <p class="panel-note">统一入口只推荐 `/mcp`。工具可以拆开调用，也可以用智能工具自动在五层能力之间编排：LibreSearch、Search-2api、Grok、Tavily、Firecrawl。</p>
               <div class="kv-list compact">
-                <div><span>入口</span><strong>/mcp</strong></div>
-                <div><span>状态</span><strong>跟随运行检查</strong></div>
-              </div>
-            </section>
-            <section class="panel view-panel" data-group-panel="mcp" data-view-panel="libresearch-mcp" hidden>
-              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg><h2>LibreSearch MCP</h2></div>
-              <div class="kv-list compact">
-                <div><span>入口</span><strong>/libresearch/mcp</strong></div>
-                <div><span>工具</span><strong>libresearch_*</strong></div>
-              </div>
-            </section>
-            <section class="panel view-panel" data-group-panel="mcp" data-view-panel="fusion-mcp" hidden>
-              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 8h16M6 16h12" /></svg><h2>Fusion MCP</h2></div>
-              <div class="kv-list compact">
-                <div><span>入口</span><strong>/fusion/mcp</strong></div>
-                <div><span>工具</span><strong>fusionsearch_*</strong></div>
+                <div><span>主入口</span><strong>/mcp</strong></div>
+                <div><span>智能工具</span><strong>smart_research / smart_fetch / fusion_status</strong></div>
+                <div><span>拆开调用</span><strong>web_search / web_fetch / web_map / libre_search / search2api_chat</strong></div>
+                <div><span>兼容入口</span><strong>/libresearch/mcp / /fusion/mcp</strong></div>
               </div>
             </section>
 
@@ -469,7 +444,7 @@
               <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg><h2>MCP Token</h2></div>
               <div class="kv-list compact">
                 <div><span>状态</span><strong id="mcpAuthState">-</strong></div>
-                <div><span>范围</span><strong>/mcp / /libresearch/mcp / /fusion/mcp</strong></div>
+                <div><span>范围</span><strong>主入口 /mcp，兼容旧 profile 路由</strong></div>
                 <div><span>来源</span><strong id="mcpEnvState">-</strong></div>
               </div>
               <label class="field">

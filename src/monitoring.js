@@ -47,11 +47,10 @@ export function buildKeyStatus(config = {}) {
     endpointStatus('libresearchEndpoint', 'LibreSearch Endpoint', config.searchEndpoint, ['SEARCH_ENDPOINT']),
     secretStatus('search2apiBearer', 'Search-2api Bearer', config.searchShApiKey, ['SEARCH_SH_API_KEY', 'API_MASTER_KEY']),
     cookieStatus('search2apiCookie', 'Search-2api Cookie', process.env.SEARCH_SH_COOKIE || ''),
-    secretStatus('gudaApiKey', 'GuDa API Key', config.gudaApiKey, ['GUDA_API_KEY']),
-    secretStatus('grokApiKey', 'Grok API Key', fusion.grokApiKey, ['GROK_API_KEY', 'GUDA_API_KEY']),
-    secretStatus('tavilyApiKey', 'Tavily REST Key', fusion.tavilyApiKey, ['TAVILY_API_KEY', 'GUDA_API_KEY']),
+    secretStatus('grokApiKey', 'Grok API Key', fusion.grokApiKey, ['GROK_API_KEY']),
+    secretStatus('tavilyApiKey', 'Tavily REST Key', fusion.tavilyApiKey, ['TAVILY_API_KEY']),
     secretStatus('tavilyMcpToken', 'Tavily MCP Token', fusion.tavilyMcpToken, ['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN']),
-    secretStatus('firecrawlApiKey', 'Firecrawl Key', fusion.firecrawlApiKey, ['FIRECRAWL_API_KEY', 'GUDA_API_KEY']),
+    secretStatus('firecrawlApiKey', 'Firecrawl Key', fusion.firecrawlApiKey, ['FIRECRAWL_API_KEY']),
     secretStatus('adminToken', 'Admin Token', config.adminToken, ['ADMIN_TOKEN']),
     secretStatus('mcpAuthToken', 'MCP Token', config.mcpAuthToken, ['MCP_AUTH_TOKEN'])
   ];

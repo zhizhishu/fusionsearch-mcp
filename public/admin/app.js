@@ -52,9 +52,6 @@ const fields = {
   search2apiUpstreamState: $('#search2apiUpstreamState'),
   search2apiRuntimeState: $('#search2apiRuntimeState'),
   search2apiStatusHint: $('#search2apiStatusHint'),
-  gudaBaseUrl: $('#gudaBaseUrl'),
-  gudaApiKey: $('#gudaApiKey'),
-  clearGudaApiKey: $('#clearGudaApiKey'),
   grokApiUrl: $('#grokApiUrl'),
   grokApiKey: $('#grokApiKey'),
   clearGrokApiKey: $('#clearGrokApiKey'),
@@ -442,7 +439,6 @@ async function loadConfig() {
   if (fields.mcpEnvState) {
     fields.mcpEnvState.textContent = config.envOverrides?.mcpAuthToken ? '环境变量已提供，可被运行配置覆盖' : '运行配置管理';
   }
-  fields.gudaBaseUrl.value = config.fusion?.gudaBaseUrl || 'https://code.guda.studio';
   fields.grokApiUrl.value = config.fusion?.grokApiUrl || '';
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
   fields.grokSystemPrompt.value = config.fusion?.grokSystemPrompt || defaultGrokSystemPrompt;
@@ -467,9 +463,6 @@ async function saveConfig() {
     searchShChatEndpoint: fields.searchShEndpoint.value.trim(),
     searchShApiKey: fields.searchShApiKey.value,
     clearSearchShApiKey: fields.clearSearchShApiKey.checked,
-    gudaBaseUrl: fields.gudaBaseUrl.value.trim(),
-    gudaApiKey: fields.gudaApiKey.value,
-    clearGudaApiKey: fields.clearGudaApiKey.checked,
     grokApiUrl: fields.grokApiUrl.value.trim(),
     grokApiKey: fields.grokApiKey.value,
     clearGrokApiKey: fields.clearGrokApiKey.checked,
@@ -867,12 +860,10 @@ async function listGrokModels() {
 }
 
 function resetFusionSecrets() {
-  fields.gudaApiKey.value = '';
   fields.grokApiKey.value = '';
   fields.tavilyApiKey.value = '';
   fields.tavilyMcpToken.value = '';
   fields.firecrawlApiKey.value = '';
-  fields.clearGudaApiKey.checked = false;
   fields.clearGrokApiKey.checked = false;
   fields.clearTavilyApiKey.checked = false;
   fields.clearTavilyMcpToken.checked = false;

@@ -88,7 +88,6 @@ function resolveProviderUrl({ configuredUrl, defaultUrl, gudaUrl, gudaApiKey, pr
 export function getFusionPublicConfig(config = {}) {
   const resolved = resolveFusionConfig(config);
   return {
-    gudaBaseUrl: resolved.gudaBaseUrl,
     grokApiUrl: resolved.grokApiUrl,
     grokModel: resolved.grokModel,
     tavilyEnabled: resolved.tavilyEnabled,
@@ -100,7 +99,6 @@ export function getFusionPublicConfig(config = {}) {
     tavilyMcpMapTool: resolved.tavilyMcpMapTool,
     firecrawlApiUrl: resolved.firecrawlApiUrl,
     grokSystemPrompt: resolved.grokSystemPrompt,
-    hasGudaApiKey: Boolean(resolved.gudaApiKey),
     hasGrokApiKey: Boolean(resolved.grokApiKey),
     hasTavilyApiKey: Boolean(resolved.tavilyApiKey),
     hasTavilyMcpToken: Boolean(resolved.tavilyMcpToken),
