@@ -13,12 +13,27 @@ import { executeSearch, resolveQuery, buildSummaryLines } from './searchClient.j
 import {
   DEFAULT_GROK_SYSTEM_PROMPT,
   buildFusionConfigInfo,
+  executeFirecrawlFetch,
   executeGrokSearch,
+  executeTavilyExtractOnly,
   executeTavilyFetch,
   executeTavilyMap,
+  executeTavilySearchOnly,
   fetchAvailableModels,
   getFusionPublicConfig
 } from './fusionClients.js';
+import {
+  buildKeyStatus,
+  buildMonitoringSnapshot,
+  createMonitoringState,
+  runMonitoringProbe
+} from './monitoring.js';
+import {
+  executeSmartFetch,
+  executeSmartResearch,
+  formatSmartFetchResult,
+  formatSmartResearchResult
+} from './smartRouter.js';
 import { SourceCache, mergeSources, newSessionId } from './sourceCache.js';
 import { createAuth } from './auth.js';
 import { configureLogger, getLogFilePath, logEvent, readLogEntries } from './logger.js';
@@ -231,6 +246,11 @@ const adminGrokTestSchema = z.object({
   platform: z.string().trim().optional(),
   model: z.string().trim().optional(),
   extraSources: z.number().int().min(0).max(10).optional()
+});
+
+const adminTavilySearchTestSchema = z.object({
+  query: z.string().trim().min(1).default('test'),
+  maxResults: z.number().int().min(1).max(20).optional()
 });
 
 const adminFetchTestSchema = z.object({
@@ -656,6 +676,11 @@ function buildErrorResponse({ query, error, params }) {
       }
     ]
   };
+}
+
+function isNotConfiguredErrorMessage(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /未配置|not configured|已关闭|disabled|missing key|missing token/iu.test(message);
 }
 
 function createSearchTool(server, config) {
@@ -1560,7 +1585,7 @@ async function callSearch2Api(config, { prompt, model = 'search-sh-ai', timeoutM
   }
 }
 
-function createPrecisionTools(server, config, sourceCache, { includeSearch = true, includeFusion = true } = {}) {
+function createPrecisionTools(server, config, sourceCache, { includeSearch = true, includeFusion = true, monitoring = null } = {}) {
   if (includeSearch) {
     const libreSearchShape = {
       ...searchOptionShape,
@@ -1668,6 +1693,11 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
             extraSources: parsed.extraSources ?? 0,
             timeoutMs: parsed.timeoutMs
           });
+          monitoring?.record('grok', {
+            ok: true,
+            message: 'web_search 调用成功',
+            source: 'mcp-tool'
+          });
           sourceCache.set(sessionId, result.sources);
           return {
             content: [
@@ -1685,6 +1715,11 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
             ]
           };
         } catch (error) {
+          monitoring?.record('grok', {
+            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
+            message: error instanceof Error ? error.message : String(error),
+            source: 'mcp-tool'
+          });
           sourceCache.set(sessionId, []);
           return buildErrorResponse({ query: parsed.query, error });
         }
@@ -1707,8 +1742,18 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
         const { url, timeoutMs } = await fetchSchema.parseAsync(input);
         try {
           const result = await executeTavilyFetch({ config, url, timeoutMs });
+          monitoring?.record(result.provider === 'firecrawl' ? 'firecrawl' : 'tavily', {
+            ok: true,
+            message: `web_fetch 调用成功：${result.provider}`,
+            source: 'mcp-tool'
+          });
           return { content: [{ type: 'text', text: `# Web Fetch\nProvider: ${result.provider}\nURL: ${url}\n\n${result.content}` }] };
         } catch (error) {
+          monitoring?.record('tavily', {
+            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
+            message: error instanceof Error ? error.message : String(error),
+            source: 'mcp-tool'
+          });
           return buildErrorResponse({ query: url, error });
         }
       }
@@ -1734,8 +1779,18 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
         const parsed = await mapSchema.parseAsync(input);
         try {
           const result = await executeTavilyMap({ config, ...parsed });
+          monitoring?.record('tavily', {
+            ok: true,
+            message: 'web_map 调用成功',
+            source: 'mcp-tool'
+          });
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         } catch (error) {
+          monitoring?.record('tavily', {
+            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
+            message: error instanceof Error ? error.message : String(error),
+            source: 'mcp-tool'
+          });
           return buildErrorResponse({ query: parsed.url, error });
         }
       }
@@ -1773,6 +1828,11 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
           sourceList.push(...getLibreResultItems(payload, limit).map((item) => ({ ...item, provider: 'libresearch' })));
         } catch (error) {
           evidence.push(`## LibreSearch\n失败: ${error instanceof Error ? error.message : String(error)}`);
+          monitoring?.record('libresearch', {
+            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
+            message: error instanceof Error ? error.message : String(error),
+            source: 'mcp-tool'
+          });
         }
 
         try {
@@ -1783,6 +1843,11 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
           evidence.push(`## Search-2api/search.sh\n${search2api.content}`);
         } catch (error) {
           evidence.push(`## Search-2api/search.sh\n失败: ${error instanceof Error ? error.message : String(error)}`);
+          monitoring?.record('search2api', {
+            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
+            message: error instanceof Error ? error.message : String(error),
+            source: 'mcp-tool'
+          });
         }
 
         const prompt = [
@@ -1800,6 +1865,11 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
             model: parsed.model,
             extraSources: parsed.extraSources ?? 0,
             timeoutMs: parsed.timeoutMs
+          });
+          monitoring?.record('grok', {
+            ok: true,
+            message: 'fusion_research Grok 汇总成功',
+            source: 'mcp-tool'
           });
           const sources = mergeSources(sourceList, result.sources);
           sourceCache.set(sessionId, sources);
@@ -1822,6 +1892,11 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
             ]
           };
         } catch (error) {
+          monitoring?.record('grok', {
+            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
+            message: error instanceof Error ? error.message : String(error),
+            source: 'mcp-tool'
+          });
           sourceCache.set(sessionId, sourceList);
           return {
             content: [
@@ -1839,6 +1914,133 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
             ]
           };
         }
+      }
+    );
+
+    const smartFetchShape = {
+      url: z.string().trim().min(1).describe('网页 URL，可省略 https:// 但需要像 example.com/path 这样的域名'),
+      question: z.string().trim().describe('可选：针对网页内容要回答的问题').optional(),
+      summarize: z.boolean().describe('是否让 Grok 基于抓取内容总结，默认 false').optional(),
+      timeoutMs: z.number().int().min(5000).max(120000).describe('每个 provider 请求超时毫秒数').optional()
+    };
+    const smartFetchSchema = z.object(smartFetchShape);
+    server.registerTool(
+      'smart_fetch',
+      {
+        title: 'Smart Fetch',
+        description: '智能网页抓取：Tavily Extract -> Firecrawl Scrape -> HTML fetch，必要时再让 Grok 总结',
+        inputSchema: smartFetchShape
+      },
+      async (input) => {
+        const parsed = await smartFetchSchema.parseAsync(input);
+        const result = await executeSmartFetch({
+          config,
+          url: parsed.url,
+          question: parsed.question || '',
+          summarize: Boolean(parsed.summarize),
+          timeoutMs: parsed.timeoutMs,
+          monitor: monitoring
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formatSmartFetchResult(result)
+            },
+            {
+              type: 'text',
+              text: `\n\n原始状态 JSON:\n${JSON.stringify({
+                ok: result.ok,
+                mode: result.mode,
+                provider: result.provider,
+                providers: result.providers,
+                attempts: result.attempts
+              }, null, 2)}`
+            }
+          ]
+        };
+      }
+    );
+
+    const smartResearchShape = {
+      input: z.string().trim().min(1).describe('关键词、自然语言问题或 URL'),
+      question: z.string().trim().describe('当 input 是 URL 时，可填写针对该网页的问题').optional(),
+      limit: z.number().int().min(1).max(10).describe('每个搜索源最多采用的结果数量，默认 5').optional(),
+      deep: z.boolean().describe('是否抓取前 2 个候选网页正文，默认 false 以节省额度').optional(),
+      summarize: z.boolean().describe('是否交给 Grok 汇总，默认 true；Grok 失败时仍返回证据').optional(),
+      timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
+    };
+    const smartResearchSchema = z.object(smartResearchShape);
+    server.registerTool(
+      'smart_research',
+      {
+        title: 'Smart Research',
+        description: '智能研究入口：URL 自动抓取，关键词自动并用 LibreSearch、Search-2api、Tavily，再由 Grok 汇总',
+        inputSchema: smartResearchShape
+      },
+      async (input) => {
+        const parsed = await smartResearchSchema.parseAsync(input);
+        const result = await executeSmartResearch({
+          config,
+          input: parsed.input,
+          question: parsed.question || '',
+          limit: parsed.limit ?? 5,
+          deep: Boolean(parsed.deep),
+          summarize: parsed.summarize !== false,
+          timeoutMs: parsed.timeoutMs,
+          monitor: monitoring
+        });
+        const sessionId = newSessionId();
+        sourceCache.set(sessionId, Array.isArray(result.sources) ? result.sources : []);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: [
+                `session_id: ${sessionId}`,
+                formatSmartResearchResult(result)
+              ].join('\n')
+            },
+            {
+              type: 'text',
+              text: `\n\n原始状态 JSON:\n${JSON.stringify({
+                ok: result.ok,
+                mode: result.mode,
+                providers: result.providers,
+                attempts: result.attempts,
+                fetched: result.fetched || []
+              }, null, 2)}`
+            }
+          ]
+        };
+      }
+    );
+
+    const statusShape = {
+      includeKeys: z.boolean().describe('是否包含脱敏 Key 状态，默认 true').optional()
+    };
+    const statusSchema = z.object(statusShape);
+    server.registerTool(
+      'fusion_status',
+      {
+        title: 'FusionSearch Status',
+        description: '返回 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 的最近健康状态和脱敏 Key 状态',
+        inputSchema: statusShape
+      },
+      async (input) => {
+        const parsed = await statusSchema.parseAsync(input ?? {});
+        const snapshot = buildMonitoringSnapshot(config, monitoring);
+        if (parsed.includeKeys === false) {
+          delete snapshot.keyStatus;
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(snapshot, null, 2)
+            }
+          ]
+        };
       }
     );
   }
@@ -2103,6 +2305,7 @@ export function createApp(userConfig = {}) {
     }
   };
   const sourceCache = new SourceCache();
+  const monitoring = createMonitoringState();
 
   const publicConfig = () => ({
     serverName: config.serverName,
@@ -2113,6 +2316,7 @@ export function createApp(userConfig = {}) {
     searchShBaseUrl: getSearch2ApiBaseUrl(config.searchShChatEndpoint),
     hasSearchShApiKey: Boolean(config.searchShApiKey),
     fusion: getFusionPublicConfig(config),
+    keyStatus: buildKeyStatus(config),
     defaultParams: config.defaultParams,
     runtimeConfigPath: runtimeConfigPath ?? null,
     envOverrides: {
@@ -2374,6 +2578,23 @@ export function createApp(userConfig = {}) {
     });
   }));
 
+  app.get('/api/admin/keys/status', auth.requireAdmin, (_req, res) => {
+    res.json({
+      ok: true,
+      keyStatus: buildKeyStatus(config)
+    });
+  });
+
+  app.get('/api/admin/monitoring', auth.requireAdmin, (_req, res) => {
+    res.json(buildMonitoringSnapshot(config, monitoring));
+  });
+
+  app.post('/api/admin/monitoring/probe', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const force = Boolean(req.body?.force);
+    const snapshot = await runMonitoringProbe({ config, monitor: monitoring, force });
+    res.json(snapshot);
+  }));
+
   app.put('/api/admin/config', auth.requireAdmin, asyncHandler(async (req, res) => {
     const next = await adminConfigUpdateSchema.parseAsync(req.body ?? {});
     const updateSecret = (clear, value, key) => {
@@ -2605,6 +2826,7 @@ export function createApp(userConfig = {}) {
     };
 
     const timeout = createTimeoutSignal();
+    const startedAt = Date.now();
     try {
       const { payload, params } = await executeSearch({
         endpoint: config.searchEndpoint,
@@ -2612,6 +2834,12 @@ export function createApp(userConfig = {}) {
         query,
         overrides,
         signal: timeout.signal
+      });
+      monitoring.record('libresearch', {
+        ok: true,
+        message: 'Admin LibreSearch 测试通过',
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
       });
       res.json({
         ok: true,
@@ -2621,6 +2849,12 @@ export function createApp(userConfig = {}) {
         payload
       });
     } catch (error) {
+      monitoring.record('libresearch', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({
         ok: false,
         error: formatAdminTestError(
@@ -2635,8 +2869,14 @@ export function createApp(userConfig = {}) {
 
   app.post('/api/admin/test/search-sh', auth.requireAdmin, asyncHandler(async (req, res) => {
     const input = await adminSearchShTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
 
     if (!config.searchShChatEndpoint) {
+      monitoring.record('search2api', {
+        status: 'paused',
+        message: '未配置 Search-2api 接口',
+        source: 'admin-test'
+      });
       res.json({ ok: false, error: { message: '未配置 Search-2api 接口' } });
       return;
     }
@@ -2705,6 +2945,12 @@ export function createApp(userConfig = {}) {
     const result = streamResult.ok ? streamResult : await requestSearch2Api(false);
 
     if (result.ok) {
+      monitoring.record('search2api', {
+        ok: true,
+        message: `Admin Search-2api ${streamResult.ok ? 'stream' : 'non-stream'} 测试通过`,
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({
         ok: true,
         model: body.model,
@@ -2716,6 +2962,12 @@ export function createApp(userConfig = {}) {
       return;
     }
 
+    monitoring.record('search2api', {
+      ok: false,
+      message: result.error?.message || 'Search-2api 测试失败',
+      responseTimeMs: Date.now() - startedAt,
+      source: 'admin-test'
+    });
     res.json({
       ok: false,
       error: result.error,
@@ -2814,6 +3066,7 @@ export function createApp(userConfig = {}) {
 
   app.post('/api/admin/test/grok', auth.requireAdmin, asyncHandler(async (req, res) => {
     const input = await adminGrokTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
     try {
       const result = await executeGrokSearch({
         config,
@@ -2823,8 +3076,96 @@ export function createApp(userConfig = {}) {
         extraSources: input.extraSources ?? 0,
         timeoutMs: ADMIN_TEST_TIMEOUT_MS
       });
+      monitoring.record('grok', {
+        ok: true,
+        message: 'Admin Grok 测试通过',
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({ ok: true, ...result });
     } catch (error) {
+      monitoring.record('grok', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: false,
+        error: formatAdminTestError(
+          error,
+          error instanceof Error ? error.message : String(error)
+        )
+      });
+    }
+  }));
+
+  app.post('/api/admin/test/tavily-search', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const input = await adminTavilySearchTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
+    try {
+      const result = await executeTavilySearchOnly({
+        config,
+        query: input.query,
+        maxResults: input.maxResults ?? 5
+      });
+      monitoring.record('tavily', {
+        ok: true,
+        message: 'Admin Tavily Search 测试通过',
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: true,
+        provider: result.provider,
+        resultCount: result.results.length,
+        results: result.results
+      });
+    } catch (error) {
+      monitoring.record('tavily', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: false,
+        error: formatAdminTestError(
+          error,
+          error instanceof Error ? error.message : String(error)
+        )
+      });
+    }
+  }));
+
+  app.post('/api/admin/test/tavily-fetch', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const input = await adminFetchTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
+    try {
+      const result = await executeTavilyExtractOnly({
+        config,
+        url: input.url,
+        timeoutMs: ADMIN_TEST_TIMEOUT_MS
+      });
+      monitoring.record('tavily', {
+        ok: true,
+        message: 'Admin Tavily Fetch 测试通过',
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: true,
+        provider: result.provider,
+        preview: result.content.slice(0, 2000),
+        length: result.content.length
+      });
+    } catch (error) {
+      monitoring.record('tavily', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({
         ok: false,
         error: formatAdminTestError(
@@ -2837,11 +3178,18 @@ export function createApp(userConfig = {}) {
 
   app.post('/api/admin/test/fusion-fetch', auth.requireAdmin, asyncHandler(async (req, res) => {
     const input = await adminFetchTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
     try {
       const result = await executeTavilyFetch({
         config,
         url: input.url,
         timeoutMs: ADMIN_TEST_TIMEOUT_MS
+      });
+      monitoring.record(result.provider === 'firecrawl' ? 'firecrawl' : 'tavily', {
+        ok: true,
+        message: `Admin Fusion Fetch 通过：${result.provider}`,
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
       });
       res.json({
         ok: true,
@@ -2850,6 +3198,50 @@ export function createApp(userConfig = {}) {
         length: result.content.length
       });
     } catch (error) {
+      monitoring.record('tavily', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: false,
+        error: formatAdminTestError(
+          error,
+          error instanceof Error ? error.message : String(error)
+        )
+      });
+    }
+  }));
+
+  app.post('/api/admin/test/firecrawl-fetch', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const input = await adminFetchTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
+    try {
+      const result = await executeFirecrawlFetch({
+        config,
+        url: input.url,
+        timeoutMs: ADMIN_TEST_TIMEOUT_MS
+      });
+      monitoring.record('firecrawl', {
+        ok: true,
+        message: 'Admin Firecrawl 测试通过',
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: true,
+        provider: result.provider,
+        preview: result.content.slice(0, 2000),
+        length: result.content.length
+      });
+    } catch (error) {
+      monitoring.record('firecrawl', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({
         ok: false,
         error: formatAdminTestError(
@@ -2862,10 +3254,23 @@ export function createApp(userConfig = {}) {
 
   app.post('/api/admin/test/fusion-map', auth.requireAdmin, asyncHandler(async (req, res) => {
     const input = await adminMapTestSchema.parseAsync(req.body ?? {});
+    const startedAt = Date.now();
     try {
       const result = await executeTavilyMap({ config, ...input, timeout: input.timeout ?? 30 });
+      monitoring.record('tavily', {
+        ok: true,
+        message: 'Admin Tavily Map 测试通过',
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({ ok: true, ...result });
     } catch (error) {
+      monitoring.record('tavily', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
       res.json({
         ok: false,
         error: formatAdminTestError(
@@ -2907,7 +3312,8 @@ export function createApp(userConfig = {}) {
   const registerMcpProfile = (server, profile) => {
     createPrecisionTools(server, config, sourceCache, {
       includeSearch: profile === 'full' || profile === 'libresearch',
-      includeFusion: profile === 'full' || profile === 'fusion'
+      includeFusion: profile === 'full' || profile === 'fusion',
+      monitoring
     });
 
     if (profile === 'full' || profile === 'libresearch') {
@@ -2955,7 +3361,7 @@ export function createApp(userConfig = {}) {
         },
         instructions:
           `This endpoint exposes the "${profile}" FusionSearch MCP profile. ` +
-          'Preferred tools are "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
+          'Preferred tools are "smart_research", "smart_fetch", "fusion_status", "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
           'POST initialize/call requests to / or /mcp (Streamable HTTP). Legacy SSE clients connect to /sse (or /mcp/sse) and POST to /messages (or /mcp/messages) with the provided sessionId.'
       }
     );
