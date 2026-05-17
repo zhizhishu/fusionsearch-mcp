@@ -63,6 +63,9 @@ const fields = {
   resetGrokPrompt: $('#resetGrokPrompt'),
   tavilyEnabled: $('#tavilyEnabled'),
   tavilyProvider: $('#tavilyProvider'),
+  tavilyProviderChoices: $$('input[name="tavilyProviderChoice"]'),
+  tavilyProviderOptions: $$('[data-tavily-provider-option]'),
+  tavilyProviderPanels: $$('[data-tavily-provider-panel]'),
   tavilyApiUrl: $('#tavilyApiUrl'),
   tavilyApiKey: $('#tavilyApiKey'),
   clearTavilyApiKey: $('#clearTavilyApiKey'),
@@ -153,6 +156,29 @@ function formatFusionKeyState(fusion = {}) {
     fusion.hasFirecrawlApiKey ? 'Firecrawl' : ''
   ].filter(Boolean);
   return providers.length ? `${providers.join(' / ')} 已配置` : '未配置';
+}
+
+function getTavilyProvider() {
+  const selected = fields.tavilyProviderChoices.find((choice) => choice.checked)?.value;
+  return selected === 'mcp' ? 'mcp' : 'rest';
+}
+
+function setTavilyProvider(value = 'rest') {
+  const provider = value === 'mcp' ? 'mcp' : 'rest';
+  if (fields.tavilyProvider) {
+    fields.tavilyProvider.value = provider;
+  }
+  fields.tavilyProviderChoices.forEach((choice) => {
+    choice.checked = choice.value === provider;
+  });
+  fields.tavilyProviderOptions.forEach((option) => {
+    const isActive = option.dataset.tavilyProviderOption === provider;
+    option.classList.toggle('active', isActive);
+    option.setAttribute('aria-checked', String(isActive));
+  });
+  fields.tavilyProviderPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.tavilyProviderPanel !== provider;
+  });
 }
 
 function renderHfSecretFields(options = []) {
@@ -421,7 +447,7 @@ async function loadConfig() {
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
   fields.grokSystemPrompt.value = config.fusion?.grokSystemPrompt || defaultGrokSystemPrompt;
   fields.tavilyEnabled.checked = config.fusion?.tavilyEnabled !== false;
-  fields.tavilyProvider.value = config.fusion?.tavilyProvider || 'rest';
+  setTavilyProvider(config.fusion?.tavilyProvider || 'rest');
   fields.tavilyApiUrl.value = config.fusion?.tavilyApiUrl || 'https://api.tavily.com';
   fields.tavilyMcpUrl.value = config.fusion?.tavilyMcpUrl || '';
   fields.tavilyMcpSearchTool.value = config.fusion?.tavilyMcpSearchTool || '';
@@ -450,7 +476,7 @@ async function saveConfig() {
     grokModel: fields.grokModel.value.trim() || 'grok-4.20-beta',
     grokSystemPrompt: fields.grokSystemPrompt.value.trim() || defaultGrokSystemPrompt,
     tavilyEnabled: fields.tavilyEnabled.checked,
-    tavilyProvider: fields.tavilyProvider.value,
+    tavilyProvider: getTavilyProvider(),
     tavilyApiUrl: fields.tavilyApiUrl.value.trim(),
     tavilyApiKey: fields.tavilyApiKey.value,
     clearTavilyApiKey: fields.clearTavilyApiKey.checked,
@@ -902,6 +928,10 @@ bindAction('#testFirecrawlFetch', testFirecrawlFetch);
 bindAction('#resetGrokPrompt', async () => {
   fields.grokSystemPrompt.value = defaultGrokSystemPrompt;
   fields.saveHint.textContent = '提示词已恢复，保存后生效';
+});
+
+fields.tavilyProviderChoices.forEach((choice) => {
+  choice.addEventListener('change', () => setTavilyProvider(choice.value));
 });
 
 mainNavItems.forEach((item) => {

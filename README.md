@@ -184,10 +184,10 @@ HF_WRITE_TOKEN=<有该 Space 写权限的 Hugging Face token>
 
 FusionSearch 支持两种 Tavily 来源：
 
-- `TAVILY_PROVIDER=rest`：走官方 Tavily REST，使用 `TAVILY_API_URL` / `TAVILY_API_KEY`。
+- `TAVILY_PROVIDER=rest`：走 Tavily REST，使用 `TAVILY_API_URL` / `TAVILY_API_KEY`；`TAVILY_API_URL` 默认 `https://api.tavily.com`，也可以换成自定义代理地址。
 - `TAVILY_PROVIDER=mcp`：走第三方 Tavily MCP/Hikari，使用 `TAVILY_MCP_URL` / `TAVILY_MCP_TOKEN`。如果只设置了 `TAVILY_HIKARI_TOKEN` 且未指定 provider，服务会自动切到 MCP 模式，并默认使用 `https://tavily.ivanli.cc/mcp`。
 
-MCP 模式会自动发现 search / extract / map 工具。第三方网关工具名特殊时，可设置 `TAVILY_MCP_SEARCH_TOOL`、`TAVILY_MCP_EXTRACT_TOOL`、`TAVILY_MCP_MAP_TOOL` 覆盖。
+Admin UI 的 Tavily 页是二选一：`官方 REST` 显示 REST API URL/Key，`自定义 MCP / Hikari` 显示 MCP URL/Token 与工具名覆盖。MCP 模式会自动发现 search / extract / map 工具；第三方网关工具名特殊时，可设置 `TAVILY_MCP_SEARCH_TOOL`、`TAVILY_MCP_EXTRACT_TOOL`、`TAVILY_MCP_MAP_TOOL` 覆盖。
 
 ### Admin 日志
 
@@ -239,7 +239,7 @@ http://<host>:1666/admin
 - All Key Control：集中填写 Grok/OpenAI-compatible、Tavily、Firecrawl，以及可选 GuDa 统一入口。
 - Grok/OpenAI-compatible URL、Key、模型；GuDa Base URL 与 GuDa Key 是可选统一入口。
 - Grok System Prompt：真正随请求发给 Grok 的 `system` message。
-- Tavily 与 Firecrawl Key/API URL，Tavily 支持官方 REST 和第三方 MCP/Hikari。
+- Tavily 与 Firecrawl Key/API URL，Tavily 页提供官方 REST 与自定义 MCP/Hikari 二选一配置。
 - Admin Token、Session Secret、MCP Token 轮换。
 
 All Key Control 会显示 `已配置 / 未配置`、脱敏值和来源，例如 `sk-****1234`、`cf_clearance=****; len 392`。完整 Cookie、Token、API Key 不会回显，也不会写入日志。
