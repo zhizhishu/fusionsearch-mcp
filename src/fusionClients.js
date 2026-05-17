@@ -2,7 +2,6 @@ import { mergeSources, splitAnswerAndSources } from './sourceCache.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
-const DEFAULT_GUDA_BASE_URL = 'https://code.guda.studio';
 const DEFAULT_GROK_MODEL = 'grok-4.20-beta';
 const DEFAULT_TAVILY_API_URL = 'https://api.tavily.com';
 const DEFAULT_TAVILY_MCP_URL = 'https://tavily.ivanli.cc/mcp';
@@ -20,37 +19,21 @@ export const DEFAULT_GROK_SYSTEM_PROMPT = [
 ].join('\n');
 
 export function resolveFusionConfig(config = {}) {
-  const gudaBaseUrl = config.gudaBaseUrl || DEFAULT_GUDA_BASE_URL;
-  const gudaApiKey = config.gudaApiKey || '';
-  const grokApiUrl = config.grokApiUrl || (gudaApiKey ? `${gudaBaseUrl}/grok/v1` : '');
-  const grokApiKey = config.grokApiKey || gudaApiKey || '';
+  const grokApiUrl = config.grokApiUrl || '';
+  const grokApiKey = config.grokApiKey || '';
   const tavilyMcpToken = config.tavilyMcpToken || config.tavilyHikariToken || '';
   const tavilyMcpUrl = config.tavilyMcpUrl || config.tavilyHikariUrl || (tavilyMcpToken ? DEFAULT_TAVILY_MCP_URL : '');
-  const tavilyApiUrl = resolveProviderUrl({
-    configuredUrl: config.tavilyApiUrl,
-    defaultUrl: DEFAULT_TAVILY_API_URL,
-    gudaUrl: `${gudaBaseUrl}/tavily`,
-    gudaApiKey,
-    providerApiKey: config.tavilyApiKey
-  });
-  const tavilyApiKey = config.tavilyApiKey || gudaApiKey || '';
+  const tavilyApiUrl = config.tavilyApiUrl || DEFAULT_TAVILY_API_URL;
+  const tavilyApiKey = config.tavilyApiKey || '';
   const tavilyProvider = resolveTavilyProvider(config.tavilyProvider, {
     tavilyMcpUrl,
     tavilyMcpToken
   });
-  const firecrawlApiUrl = resolveProviderUrl({
-    configuredUrl: config.firecrawlApiUrl,
-    defaultUrl: DEFAULT_FIRECRAWL_API_URL,
-    gudaUrl: `${gudaBaseUrl}/firecrawl`,
-    gudaApiKey,
-    providerApiKey: config.firecrawlApiKey
-  });
-  const firecrawlApiKey = config.firecrawlApiKey || gudaApiKey || '';
+  const firecrawlApiUrl = config.firecrawlApiUrl || DEFAULT_FIRECRAWL_API_URL;
+  const firecrawlApiKey = config.firecrawlApiKey || '';
   const tavilyEnabled = config.tavilyEnabled !== false;
 
   return {
-    gudaBaseUrl,
-    gudaApiKey,
     grokApiUrl,
     grokApiKey,
     grokModel: applyModelSuffix(config.grokModel || DEFAULT_GROK_MODEL, grokApiUrl),
@@ -75,14 +58,6 @@ function resolveTavilyProvider(value, { tavilyMcpUrl, tavilyMcpToken }) {
     return normalized;
   }
   return tavilyMcpUrl || tavilyMcpToken ? TAVILY_PROVIDER_MCP : TAVILY_PROVIDER_REST;
-}
-
-function resolveProviderUrl({ configuredUrl, defaultUrl, gudaUrl, gudaApiKey, providerApiKey }) {
-  const value = configuredUrl || '';
-  if (gudaApiKey && !providerApiKey && (!value || value === defaultUrl)) {
-    return gudaUrl;
-  }
-  return value || defaultUrl;
 }
 
 export function getFusionPublicConfig(config = {}) {

@@ -29,8 +29,6 @@ const app = createApp({
   serverVersion: process.env.SERVER_VERSION ?? runtimeConfig.serverVersion,
   searchShChatEndpoint: process.env.SEARCH_SH_CHAT_ENDPOINT ?? runtimeConfig.searchShChatEndpoint,
   searchShApiKey: process.env.SEARCH_SH_API_KEY ?? runtimeConfig.searchShApiKey,
-  gudaBaseUrl: process.env.GUDA_BASE_URL ?? runtimeConfig.gudaBaseUrl,
-  gudaApiKey: process.env.GUDA_API_KEY ?? runtimeConfig.gudaApiKey,
   grokApiUrl: process.env.GROK_API_URL ?? runtimeConfig.grokApiUrl,
   grokApiKey: process.env.GROK_API_KEY ?? runtimeConfig.grokApiKey,
   grokModel: process.env.GROK_MODEL ?? runtimeConfig.grokModel,

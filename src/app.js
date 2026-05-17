@@ -49,8 +49,6 @@ export const DEFAULT_CONFIG = {
   searchShChatEndpoint: '',
   searchShApiKey: '',
   searchShProjectUrl: 'https://github.com/lza6/Search-2api',
-  gudaBaseUrl: 'https://code.guda.studio',
-  gudaApiKey: '',
   grokApiUrl: '',
   grokApiKey: '',
   grokModel: 'grok-4.20-beta',
@@ -161,9 +159,6 @@ const adminConfigUpdateSchema = z.object({
   searchShChatEndpoint: z.union([z.string().trim().url(), z.literal('')]).optional(),
   searchShApiKey: z.string().optional(),
   clearSearchShApiKey: z.boolean().optional(),
-  gudaBaseUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
-  gudaApiKey: z.string().optional(),
-  clearGudaApiKey: z.boolean().optional(),
   grokApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
   grokApiKey: z.string().optional(),
   clearGrokApiKey: z.boolean().optional(),
@@ -2324,7 +2319,6 @@ export function createApp(userConfig = {}) {
       adminToken: Boolean(process.env.ADMIN_TOKEN),
       sessionSecret: Boolean(process.env.SESSION_SECRET),
       mcpAuthToken: Boolean(process.env.MCP_AUTH_TOKEN),
-      gudaApiKey: Boolean(process.env.GUDA_API_KEY),
       grokApiUrl: Boolean(process.env.GROK_API_URL),
       grokApiKey: Boolean(process.env.GROK_API_KEY),
       grokModel: Boolean(process.env.GROK_MODEL),
@@ -2364,8 +2358,6 @@ export function createApp(userConfig = {}) {
       adminToken: config.adminToken,
       sessionSecret: config.sessionSecret,
       mcpAuthToken: config.mcpAuthToken,
-      gudaBaseUrl: config.gudaBaseUrl,
-      gudaApiKey: config.gudaApiKey,
       grokApiUrl: config.grokApiUrl,
       grokApiKey: config.grokApiKey,
       grokModel: config.grokModel,
@@ -2614,10 +2606,6 @@ export function createApp(userConfig = {}) {
     } else if (next.searchShApiKey !== undefined && next.searchShApiKey.trim()) {
       config.searchShApiKey = next.searchShApiKey.trim();
     }
-    if (next.gudaBaseUrl !== undefined) {
-      config.gudaBaseUrl = next.gudaBaseUrl || DEFAULT_CONFIG.gudaBaseUrl;
-    }
-    updateSecret(next.clearGudaApiKey, next.gudaApiKey, 'gudaApiKey');
     if (next.grokApiUrl !== undefined) {
       config.grokApiUrl = next.grokApiUrl || '';
     }

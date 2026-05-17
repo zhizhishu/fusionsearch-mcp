@@ -176,8 +176,6 @@ TAVILY_HIKARI_TOKEN=<可选，Hikari Token 兼容别名>
 FIRECRAWL_API_KEY=<可选>
 ```
 
-旧部署如果已经依赖 GuDa 网关，仍可保留 `GUDA_BASE_URL` / `GUDA_API_KEY` 作为兼容配置；新部署建议直接填写 `GROK_*`、`TAVILY_*`、`FIRECRAWL_*`。
-
 不要把 Cookie、API Key、Admin Token、MCP Token 提交到 GitHub 或 Hugging Face 文件里。它们只应该放在 `.env`、服务器环境变量或 HF Secrets。
 
 ### Admin UI 回写 Hugging Face Secrets
@@ -320,8 +318,6 @@ curl http://localhost:1666/search2api/v1/chat/completions \
 | `GRANIAN_WORKERS` / `GRANIAN_BLOCKING_THREADS` | 官方 LibreSearch 镜像的 Granian 并发参数 |
 | `GRANIAN_PROCESS_NAME` | LibreSearch 运行进程名，默认 `fusionsearch-libre`，避免部分托管平台误判默认进程名 |
 | `UWSGI_WORKERS` / `UWSGI_THREADS` | 兼容旧 LibreSearch 运行习惯的环境变量，保留给部署层填写 |
-
-Legacy 兼容变量：`GUDA_BASE_URL` / `GUDA_API_KEY` 仍被后端识别，用来兼容早期统一网关部署；它们不再是新版本 Admin UI 和 README 的主推荐配置。
 
 ## 本地开发
 

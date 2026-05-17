@@ -34,8 +34,6 @@ services:
       HF_ENDPOINT: "${HF_ENDPOINT:-https://huggingface.co}"
       HF_SPACE_ID: "${HF_SPACE_ID:-}"
       HF_WRITE_TOKEN: "${HF_WRITE_TOKEN:-}"
-      GUDA_BASE_URL: "${GUDA_BASE_URL:-https://code.guda.studio}"
-      GUDA_API_KEY: "${GUDA_API_KEY:-}"
       GROK_API_URL: "${GROK_API_URL:-}"
       GROK_API_KEY: "${GROK_API_KEY:-}"
       GROK_MODEL: "${GROK_MODEL:-grok-4.20-beta}"
