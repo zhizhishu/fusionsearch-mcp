@@ -23,6 +23,7 @@ services:
     environment:
       PORT: "1666"
       RUNTIME_CONFIG_PATH: /app/config/runtime.json
+      LOG_DIR: /app/logs
       SEARCH_ENDPOINT: "http://libresearch:8080/search"
       SEARCH_SH_CHAT_ENDPOINT: "http://search2api:8000/v1/chat/completions"
       SEARCH_SH_API_KEY: "${API_MASTER_KEY:-}"

@@ -21,6 +21,7 @@ import {
 } from './fusionClients.js';
 import { SourceCache, mergeSources, newSessionId } from './sourceCache.js';
 import { createAuth } from './auth.js';
+import { configureLogger, getLogFilePath, logEvent, readLogEntries } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ADMIN_DIR = path.resolve(__dirname, '../public/admin');
@@ -152,16 +153,27 @@ const adminConfigUpdateSchema = z.object({
   defaultParams: adminDefaultParamsSchema.optional()
 });
 
+const optionalTokenSchema = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+  z.string().trim().min(1).optional()
+);
+
 const adminSecurityUpdateSchema = z.object({
   currentAdminToken: z.string().optional(),
-  newAdminToken: z.string().trim().min(16).optional(),
-  newMcpAuthToken: z.string().trim().min(16).optional(),
+  newAdminToken: optionalTokenSchema,
+  newMcpAuthToken: optionalTokenSchema,
   clearMcpAuthToken: z.boolean().optional(),
   rotateSessionSecret: z.boolean().optional()
 }).refine((input) => (
   Boolean(input.newAdminToken || input.newMcpAuthToken || input.clearMcpAuthToken || input.rotateSessionSecret)
 ), {
   message: '至少需要提交一个安全变更'
+});
+
+const adminLogsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(120),
+  level: z.enum(['', 'debug', 'info', 'warn', 'error']).default(''),
+  scope: z.string().trim().max(80).default('')
 });
 
 const hfSecretUpdateSchema = z.object({
@@ -368,6 +380,7 @@ function registerGatewayProxy(app) {
 
 function sendAdminError(error, res) {
   if (error?.type === 'entity.parse.failed') {
+    logEvent('warn', 'admin', 'Invalid admin JSON payload');
     res.status(400).json({
       error: {
         code: 'INVALID_JSON',
@@ -378,6 +391,12 @@ function sendAdminError(error, res) {
   }
 
   if (error instanceof z.ZodError) {
+    logEvent('warn', 'admin', 'Invalid admin input', {
+      issues: error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message
+      }))
+    });
     res.status(400).json({
       error: {
         code: 'INVALID_ADMIN_INPUT',
@@ -391,6 +410,9 @@ function sendAdminError(error, res) {
     return;
   }
 
+  logEvent('error', 'admin', 'Admin internal error', {
+    message: error instanceof Error ? error.message : String(error)
+  });
   res.status(500).json({
     error: {
       code: 'ADMIN_INTERNAL_ERROR',
@@ -2017,6 +2039,7 @@ function registerResources(server, config) {
 }
 
 export function createApp(userConfig = {}) {
+  configureLogger({ logDir: userConfig.logDir });
   const {
     defaultParams: userDefaultParams,
     runtimeConfigPath,
@@ -2098,6 +2121,7 @@ export function createApp(userConfig = {}) {
       grokApiUrl: config.grokApiUrl,
       grokApiKey: config.grokApiKey,
       grokModel: config.grokModel,
+      grokSystemPrompt: config.grokSystemPrompt,
       tavilyEnabled: config.tavilyEnabled,
       tavilyApiUrl: config.tavilyApiUrl,
       tavilyApiKey: config.tavilyApiKey,
@@ -2145,6 +2169,14 @@ export function createApp(userConfig = {}) {
   app.put('/api/admin/security', auth.requireAdmin, asyncHandler(async (req, res) => {
     const next = await adminSecurityUpdateSchema.parseAsync(req.body ?? {});
     if (auth.adminAuthEnabled && !auth.verifyAdminToken(next.currentAdminToken)) {
+      logEvent('warn', 'security', 'Admin security update rejected', {
+        reason: 'invalid_current_admin_token',
+        requestedChanges: {
+          adminToken: Boolean(next.newAdminToken),
+          mcpAuthToken: Boolean(next.newMcpAuthToken || next.clearMcpAuthToken),
+          rotateSessionSecret: Boolean(next.rotateSessionSecret)
+        }
+      });
       res.status(401).json({
         error: {
           code: 'ADMIN_TOKEN_CONFIRM_REQUIRED',
@@ -2167,6 +2199,7 @@ export function createApp(userConfig = {}) {
     } else if (next.newMcpAuthToken) {
       config.mcpAuthToken = next.newMcpAuthToken;
     }
+    const adminRequiresLogin = Boolean(adminTokenChanged || next.rotateSessionSecret);
 
     auth.update({
       adminAuthEnabled: config.adminAuthEnabled,
@@ -2176,13 +2209,27 @@ export function createApp(userConfig = {}) {
     });
     await persistConfig();
 
-    if (adminTokenChanged || next.rotateSessionSecret) {
+    if (adminRequiresLogin) {
       auth.clearSession(req, res);
     }
 
+    logEvent('info', 'security', 'Admin security updated', {
+      changed: {
+        adminToken: adminTokenChanged,
+        sessionSecret: Boolean(next.rotateSessionSecret || adminTokenChanged),
+        mcpAuthToken: Boolean(next.newMcpAuthToken || next.clearMcpAuthToken)
+      },
+      adminRequiresLogin,
+      envOverrides: {
+        adminToken: Boolean(process.env.ADMIN_TOKEN),
+        sessionSecret: Boolean(process.env.SESSION_SECRET),
+        mcpAuthToken: Boolean(process.env.MCP_AUTH_TOKEN)
+      }
+    });
+
     res.json({
       ok: true,
-      adminRequiresLogin: adminTokenChanged || next.rotateSessionSecret,
+      adminRequiresLogin,
       auth: {
         adminAuthEnabled: auth.adminAuthEnabled,
         mcpAuthEnabled: auth.mcpAuthEnabled
@@ -2198,6 +2245,17 @@ export function createApp(userConfig = {}) {
   app.get('/api/admin/config', auth.requireAdmin, (_req, res) => {
     res.json(publicConfig());
   });
+
+  app.get('/api/admin/logs', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const input = await adminLogsQuerySchema.parseAsync(req.query ?? {});
+    const entries = await readLogEntries(input);
+    res.json({
+      ok: true,
+      logFilePath: getLogFilePath(),
+      count: entries.length,
+      entries
+    });
+  }));
 
   app.put('/api/admin/config', auth.requireAdmin, asyncHandler(async (req, res) => {
     const next = await adminConfigUpdateSchema.parseAsync(req.body ?? {});
@@ -2255,6 +2313,15 @@ export function createApp(userConfig = {}) {
     }
 
     await persistConfig();
+    logEvent('info', 'config', 'Runtime config saved', {
+      searchEndpoint: Boolean(config.searchEndpoint),
+      search2api: Boolean(config.searchShChatEndpoint),
+      fusion: {
+        grok: Boolean(config.grokApiUrl || config.grokApiKey),
+        tavily: Boolean(config.tavilyApiUrl || config.tavilyApiKey),
+        firecrawl: Boolean(config.firecrawlApiUrl || config.firecrawlApiKey)
+      }
+    });
     res.json(publicConfig());
   }));
 
@@ -2340,12 +2407,71 @@ export function createApp(userConfig = {}) {
     }
 
     const ok = results.every((item) => item.ok);
+    const successfulKeys = new Set(results.filter((item) => item.ok).map((item) => item.key));
+    const successfulSecrets = input.secrets.filter((item) => successfulKeys.has(item.key));
+    let runtimeAuthUpdated = false;
+    let adminRequiresLogin = false;
+    const runtimeChangedKeys = [];
+
+    const findSecretValue = (key) => successfulSecrets.find((item) => item.key === key)?.value;
+    const findTrimmedSecretValue = (key) => {
+      const value = findSecretValue(key);
+      return typeof value === 'string' ? value.trim() : value;
+    };
+    const nextAdminToken = findTrimmedSecretValue('ADMIN_TOKEN');
+    const nextSessionSecret = findSecretValue('SESSION_SECRET');
+    const nextMcpAuthToken = findTrimmedSecretValue('MCP_AUTH_TOKEN');
+
+    if (nextAdminToken) {
+      config.adminToken = nextAdminToken;
+      config.adminAuthEnabled = true;
+      config.sessionSecret = nextSessionSecret || createSecret();
+      runtimeAuthUpdated = true;
+      adminRequiresLogin = true;
+      runtimeChangedKeys.push('ADMIN_TOKEN', 'SESSION_SECRET');
+    } else if (nextSessionSecret) {
+      config.sessionSecret = nextSessionSecret;
+      runtimeAuthUpdated = true;
+      adminRequiresLogin = true;
+      runtimeChangedKeys.push('SESSION_SECRET');
+    }
+
+    if (nextMcpAuthToken) {
+      config.mcpAuthToken = nextMcpAuthToken;
+      runtimeAuthUpdated = true;
+      runtimeChangedKeys.push('MCP_AUTH_TOKEN');
+    }
+
+    if (runtimeAuthUpdated) {
+      auth.update({
+        adminAuthEnabled: config.adminAuthEnabled,
+        adminToken: config.adminToken,
+        sessionSecret: config.sessionSecret,
+        mcpAuthToken: config.mcpAuthToken
+      });
+      await persistConfig();
+      if (adminRequiresLogin) {
+        auth.clearSession(req, res);
+      }
+    }
+
+    logEvent(ok ? 'info' : 'warn', 'hf-secrets', 'Hugging Face Secrets update finished', {
+      ok,
+      updatedKeys: results.filter((item) => item.ok).map((item) => item.key),
+      failedKeys: results.filter((item) => !item.ok).map((item) => item.key),
+      runtimeChangedKeys,
+      adminRequiresLogin
+    });
+
     res.status(ok ? 200 : 207).json({
       ok,
       spaceId,
       endpoint: resolveHfEndpoint(config),
       updatedKeys: results.filter((item) => item.ok).map((item) => item.key),
       results,
+      runtimeAuthUpdated,
+      runtimeChangedKeys,
+      adminRequiresLogin,
       note: 'Hugging Face restarts or rebuilds may be needed before changed secrets are visible to the running container.'
     });
   }));

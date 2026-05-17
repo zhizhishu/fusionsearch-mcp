@@ -439,6 +439,18 @@ h1 {
   min-height: 118px;
 }
 
+.log-toolbar {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 120px auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+}
+
+.log-toolbar .field {
+  margin-top: 0;
+}
+
 input,
 select,
 textarea {
@@ -592,6 +604,85 @@ textarea:focus {
   white-space: pre-wrap;
 }
 
+.log-viewer {
+  display: grid;
+  gap: 10px;
+  max-height: 460px;
+  overflow: auto;
+  margin-top: 16px;
+  padding-right: 4px;
+}
+
+.log-entry {
+  border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+  border-radius: 18px;
+  background: color-mix(in oklch, var(--muted) 34%, var(--card));
+  padding: 13px 14px;
+}
+
+.log-entry.warn {
+  border-color: color-mix(in oklch, #d99a1a 42%, var(--border));
+}
+
+.log-entry.error {
+  border-color: color-mix(in oklch, #d44a4a 48%, var(--border));
+}
+
+.log-entry-head {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.log-entry-head span {
+  min-width: 52px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  text-align: center;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.log-entry.warn .log-entry-head span {
+  background: #b87503;
+}
+
+.log-entry.error .log-entry-head span {
+  background: #b83232;
+}
+
+.log-entry-head strong {
+  color: color-mix(in oklch, var(--foreground) 88%, black);
+  font-size: 12px;
+}
+
+.log-entry-head time {
+  justify-self: end;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.log-entry p {
+  margin-top: 8px;
+  color: color-mix(in oklch, var(--foreground) 86%, black);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.log-entry pre {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 9px;
+  padding: 10px;
+  border-radius: 13px;
+  background: color-mix(in oklch, var(--muted) 68%, white);
+  font: 11px/1.55 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 .save-bar {
   width: min(828px, calc(100vw - 48px));
   margin: 0 calc((100vw - min(1180px, calc(100vw - 48px))) / 2) 28px auto;
@@ -687,6 +778,10 @@ textarea:focus {
     overflow-x: auto;
     overscroll-behavior-x: contain;
     padding: 10px;
+  }
+
+  .log-toolbar {
+    grid-template-columns: 1fr;
   }
 
   .side-rail::-webkit-scrollbar,

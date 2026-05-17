@@ -99,6 +99,12 @@ const fields = {
   hfSecretCount: $('#hfSecretCount'),
   hfOneTimeToken: $('#hfOneTimeToken'),
   hfSecretFields: $('#hfSecretFields'),
+  logFilePath: $('#logFilePath'),
+  logCount: $('#logCount'),
+  logLevel: $('#logLevel'),
+  logScope: $('#logScope'),
+  logLimit: $('#logLimit'),
+  logViewer: $('#logViewer'),
   keyState: $('#keyState'),
   fusionKeyState: $('#fusionKeyState'),
   saveHint: $('#saveHint')
@@ -211,6 +217,10 @@ function setActiveRoute(group, subview, updateHash = true) {
       panel.dataset.groupPanel === targetGroup && panel.dataset.viewPanel === targetSubview
     ));
     activePanel?.append(fields.output);
+  }
+
+  if (targetGroup === 'status' && targetSubview === 'logs') {
+    void loadLogs().catch(() => {});
   }
 
   const nextHash = `#${targetGroup}:${targetSubview}`;
@@ -417,6 +427,7 @@ async function saveHfSecrets() {
   renderOutput({
     ok: payload.ok,
     updatedKeys: payload.updatedKeys,
+    runtimeChangedKeys: payload.runtimeChangedKeys,
     failed: (payload.results || []).filter((item) => !item.ok).map((item) => ({
       key: item.key,
       status: item.error?.status,
@@ -425,6 +436,9 @@ async function saveHfSecrets() {
     note: payload.note
   });
   setStatus(payload.ok ? 'HF 已保存' : 'HF 部分失败', payload.ok ? 'ok' : 'fail');
+  if (payload.adminRequiresLogin) {
+    await refreshSession();
+  }
 }
 
 async function testSearch() {
@@ -480,28 +494,18 @@ async function auditSearch2api() {
   setStatus(payload.ok ? '2api 正常' : '2api 需维修', payload.ok ? 'ok' : 'fail');
 }
 
-async function rotateSecurity() {
+async function rotateAdminSecurity() {
   fields.securityHint.textContent = '更新中';
   const body = {
-    currentAdminToken: fields.currentAdminToken.value || fields.currentMcpAdminToken.value,
+    currentAdminToken: fields.currentAdminToken.value,
     newAdminToken: fields.newAdminToken.value.trim() || undefined,
-    rotateSessionSecret: fields.rotateSessionSecret.checked,
-    newMcpAuthToken: fields.newMcpAuthToken.value.trim() || undefined,
-    clearMcpAuthToken: fields.clearMcpAuthToken.checked
+    rotateSessionSecret: fields.rotateSessionSecret.checked
   };
-  const payload = await requestJson('/api/admin/security', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+  const payload = await saveSecurityPayload(body);
   fields.currentAdminToken.value = '';
-  fields.currentMcpAdminToken.value = '';
   fields.newAdminToken.value = '';
-  fields.newMcpAuthToken.value = '';
   fields.rotateSessionSecret.checked = true;
-  fields.clearMcpAuthToken.checked = false;
   fields.securityHint.textContent = payload.adminRequiresLogin ? '已更新，请使用新 Admin Token 重新登录' : '已更新';
-  setStatus('安全已更新', 'ok');
   renderOutput({
     ok: payload.ok,
     adminRequiresLogin: payload.adminRequiresLogin,
@@ -513,6 +517,84 @@ async function rotateSecurity() {
   } else {
     await loadConfig();
   }
+}
+
+async function rotateMcpSecurity() {
+  const body = {
+    currentAdminToken: fields.currentMcpAdminToken.value,
+    newMcpAuthToken: fields.newMcpAuthToken.value.trim() || undefined,
+    clearMcpAuthToken: fields.clearMcpAuthToken.checked
+  };
+  const payload = await saveSecurityPayload(body);
+  fields.currentMcpAdminToken.value = '';
+  fields.newMcpAuthToken.value = '';
+  fields.clearMcpAuthToken.checked = false;
+  renderOutput({
+    ok: payload.ok,
+    auth: payload.auth,
+    note: 'MCP 客户端需要同步替换 Bearer Token。'
+  });
+  await loadConfig();
+}
+
+async function saveSecurityPayload(body) {
+  const payload = await requestJson('/api/admin/security', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  setStatus('安全已更新', 'ok');
+  return payload;
+}
+
+async function loadLogs() {
+  if (!fields.logViewer) return;
+  fields.logViewer.innerHTML = '<div class="empty-note">读取中</div>';
+  const params = new URLSearchParams({
+    limit: fields.logLimit?.value || '120'
+  });
+  if (fields.logLevel?.value) params.set('level', fields.logLevel.value);
+  if (fields.logScope?.value.trim()) params.set('scope', fields.logScope.value.trim());
+
+  const payload = await requestJson(`/api/admin/logs?${params.toString()}`);
+  if (fields.logFilePath) fields.logFilePath.textContent = payload.logFilePath || '-';
+  if (fields.logCount) fields.logCount.textContent = String(payload.count ?? 0);
+  fields.logViewer.innerHTML = (payload.entries || []).length
+    ? payload.entries.map(renderLogEntry).join('')
+    : '<div class="empty-note">暂无日志</div>';
+  setStatus('日志已刷新', 'ok');
+}
+
+function renderLogEntry(entry) {
+  const details = entry.details && Object.keys(entry.details).length
+    ? `<pre>${escapeHtml(JSON.stringify(entry.details, null, 2))}</pre>`
+    : '';
+  return `
+    <article class="log-entry ${escapeHtml(entry.level || 'info')}">
+      <div class="log-entry-head">
+        <span>${escapeHtml(entry.level || 'info')}</span>
+        <strong>${escapeHtml(entry.scope || 'app')}</strong>
+        <time>${escapeHtml(formatLogTime(entry.ts))}</time>
+      </div>
+      <p>${escapeHtml(entry.message || '')}</p>
+      ${details}
+    </article>
+  `;
+}
+
+function formatLogTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 async function testGrok() {
@@ -606,10 +688,11 @@ bindAction('#checkRuntime', checkRuntime);
 bindAction('#testSearch', testSearch);
 bindAction('#testSearchSh', testSearchSh);
 bindAction('#auditSearch2api', auditSearch2api);
-bindAction('#rotateSecurity', rotateSecurity);
-bindAction('#rotateMcpSecurity', rotateSecurity);
+bindAction('#rotateSecurity', rotateAdminSecurity);
+bindAction('#rotateMcpSecurity', rotateMcpSecurity);
 bindAction('#loadHfSecrets', loadHfSecrets);
 bindAction('#saveHfSecrets', saveHfSecrets);
+bindAction('#loadLogs', loadLogs);
 bindAction('#testGrok', testGrok);
 bindAction('#testGrokFromPreview', testGrok);
 bindAction('#testFusionFetch', testFusionFetch);

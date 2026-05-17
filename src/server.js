@@ -1,9 +1,11 @@
 import { createApp } from './app.js';
+import { configureLogger, logEvent } from './logger.js';
 import { getRuntimeConfigPath, loadRuntimeConfig, saveRuntimeConfig } from './runtimeConfig.js';
 
 const PORT = Number.parseInt(process.env.PORT ?? '1666', 10);
 const runtimeConfigPath = getRuntimeConfigPath();
 const runtimeConfig = await loadRuntimeConfig(runtimeConfigPath);
+configureLogger({ logDir: process.env.LOG_DIR });
 const initialAdminToken = process.env.ADMIN_TOKEN ?? runtimeConfig.adminToken ?? '';
 const initialMcpAuthToken = process.env.MCP_AUTH_TOKEN ?? runtimeConfig.mcpAuthToken ?? '';
 const envFlag = (name, fallback = false) => {
@@ -34,6 +36,7 @@ const app = createApp({
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY ?? runtimeConfig.firecrawlApiKey,
   hfEndpoint: process.env.HF_ENDPOINT ?? runtimeConfig.hfEndpoint,
   hfSpaceId: process.env.HF_SPACE_ID ?? process.env.SPACE_ID ?? runtimeConfig.hfSpaceId,
+  logDir: process.env.LOG_DIR ?? runtimeConfig.logDir,
   adminAuthEnabled: envFlag('ADMIN_AUTH_ENABLED', runtimeConfig.adminAuthEnabled ?? Boolean(initialAdminToken)),
   adminToken: initialAdminToken,
   sessionSecret: process.env.SESSION_SECRET ?? runtimeConfig.sessionSecret ?? '',
@@ -44,4 +47,8 @@ const app = createApp({
 
 app.listen(PORT, () => {
   console.log(`MCP search server listening on port ${PORT}`);
+  logEvent('info', 'server', 'FusionSearch server started', {
+    port: PORT,
+    runtimeConfigPath
+  });
 });

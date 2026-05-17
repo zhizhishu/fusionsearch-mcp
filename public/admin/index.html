@@ -121,6 +121,7 @@
             </div>
             <div class="subnav-group" data-subnav-group="status" hidden>
               <button class="subnav-item active" type="button" data-subview="runtime">运行状态</button>
+              <button class="subnav-item" type="button" data-subview="logs">日志</button>
             </div>
           </aside>
 
@@ -364,7 +365,7 @@
               </label>
               <label class="field">
                 <span>新的 Admin Token</span>
-                <input id="newAdminToken" type="password" autocomplete="new-password" placeholder="至少 16 位，留空则不改" />
+                <input id="newAdminToken" type="password" autocomplete="new-password" placeholder="留空则不改" />
               </label>
               <label class="check-row">
                 <input id="rotateSessionSecret" type="checkbox" checked />
@@ -391,7 +392,7 @@
               </label>
               <label class="field">
                 <span>新的 MCP Token</span>
-                <input id="newMcpAuthToken" type="password" autocomplete="new-password" placeholder="至少 16 位，留空则不改" />
+                <input id="newMcpAuthToken" type="password" autocomplete="new-password" placeholder="留空则不改" />
               </label>
               <label class="check-row">
                 <input id="clearMcpAuthToken" type="checkbox" />
@@ -484,6 +485,41 @@
                 <div><span>Fusion Key</span><strong id="fusionKeyState">-</strong></div>
               </div>
               <button class="soft-button" id="checkRuntime"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>检查</button>
+            </section>
+            <section class="panel view-panel" data-group-panel="status" data-view-panel="logs" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" /></svg>
+                <h2>日志</h2>
+              </div>
+              <div class="kv-list compact">
+                <div><span>文件</span><strong id="logFilePath">-</strong></div>
+                <div><span>数量</span><strong id="logCount">-</strong></div>
+              </div>
+              <div class="log-toolbar">
+                <label class="field">
+                  <span>级别</span>
+                  <select id="logLevel">
+                    <option value="">全部</option>
+                    <option value="info">info</option>
+                    <option value="warn">warn</option>
+                    <option value="error">error</option>
+                    <option value="debug">debug</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>范围</span>
+                  <input id="logScope" type="text" autocomplete="off" placeholder="security / hf-secrets" />
+                </label>
+                <label class="field">
+                  <span>条数</span>
+                  <input id="logLimit" type="number" min="1" max="500" value="120" />
+                </label>
+                <button class="soft-button" id="loadLogs" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
+                  刷新
+                </button>
+              </div>
+              <div class="log-viewer" id="logViewer"></div>
             </section>
           </section>
         </main>

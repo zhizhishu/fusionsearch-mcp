@@ -12,6 +12,7 @@ services:
     environment:
       PORT: "1666"
       RUNTIME_CONFIG_PATH: /app/config/runtime.json
+      LOG_DIR: /app/logs
       SEARCH_ENDPOINT: "${SEARCH_ENDPOINT:-https://echocq-libresearch.hf.space/search}"
       SEARCH_SH_CHAT_ENDPOINT: "${SEARCH_SH_CHAT_ENDPOINT:-}"
       SEARCH_SH_API_KEY: "${SEARCH_SH_API_KEY:-}"
