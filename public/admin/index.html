@@ -361,7 +361,7 @@
               </div>
               <label class="field">
                 <span>当前 Admin Token</span>
-                <input id="currentAdminToken" type="password" autocomplete="current-password" placeholder="修改安全设置时需要确认" />
+                <input id="currentAdminToken" type="password" autocomplete="current-password" placeholder="已登录即可修改，可留空" />
               </label>
               <label class="field">
                 <span>新的 Admin Token</span>
@@ -376,7 +376,7 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
                   更新安全设置
                 </button>
-                <span class="inline-hint" id="securityHint">Token 不会回显；HF 重启持久化需同步 Settings Secrets</span>
+                <span class="inline-hint" id="securityHint">Token 不会回显；保存后当前运行时立即生效</span>
               </div>
             </section>
             <section class="panel view-panel" data-group-panel="security" data-view-panel="mcp-token" hidden>
@@ -388,7 +388,7 @@
               </div>
               <label class="field">
                 <span>当前 Admin Token</span>
-                <input id="currentMcpAdminToken" type="password" autocomplete="current-password" placeholder="修改 MCP Token 时需要确认" />
+                <input id="currentMcpAdminToken" type="password" autocomplete="current-password" placeholder="已登录即可修改，可留空" />
               </label>
               <label class="field">
                 <span>新的 MCP Token</span>

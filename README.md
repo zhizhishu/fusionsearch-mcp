@@ -170,7 +170,7 @@ HF_WRITE_TOKEN=<有该 Space 写权限的 Hugging Face token>
 
 如果运行中的容器还没有 `HF_WRITE_TOKEN`，可以在 `/admin -> 安全 -> HF Secrets -> 一次性 HF Write Token` 里临时粘贴一次。UI 也可以把 `HF_WRITE_TOKEN` 自己保存成 Space Secret，方便后续继续改。已有 Secret 值不会回显；留空字段会被忽略。
 
-替换 Secret 后，重启 Space 让容器重新读取环境变量。`ADMIN_TOKEN`、`SESSION_SECRET`、`MCP_AUTH_TOKEN` 在 UI 保存成功后也会同步到当前运行时：如果改了 Admin Token 或 Session Secret，当前登录会失效，需要用新口令重新登录。Admin/MCP Token 不限制固定长度，短口令可用，但公网环境仍建议使用长随机值。
+替换 Secret 后，重启 Space 让容器重新读取环境变量。`ADMIN_TOKEN`、`SESSION_SECRET`、`MCP_AUTH_TOKEN` 在 UI 保存成功后也会同步到当前运行时：如果改了 Admin Token 或 Session Secret，当前登录会失效，需要用新口令重新登录。Admin/MCP Token 不限制固定长度，短口令可用，但公网环境仍建议使用长随机值。安全页已经登录后即可修改 Token，“当前 Admin Token”只是可选确认项，可以留空。
 
 ### Admin 日志
 

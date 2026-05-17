@@ -2168,22 +2168,17 @@ export function createApp(userConfig = {}) {
 
   app.put('/api/admin/security', auth.requireAdmin, asyncHandler(async (req, res) => {
     const next = await adminSecurityUpdateSchema.parseAsync(req.body ?? {});
-    if (auth.adminAuthEnabled && !auth.verifyAdminToken(next.currentAdminToken)) {
-      logEvent('warn', 'security', 'Admin security update rejected', {
-        reason: 'invalid_current_admin_token',
+    const currentTokenProvided = Boolean(next.currentAdminToken);
+    const currentTokenMatches = currentTokenProvided ? auth.verifyAdminToken(next.currentAdminToken) : null;
+    if (currentTokenProvided && !currentTokenMatches) {
+      logEvent('warn', 'security', 'Admin security update continued with mismatched confirmation token', {
+        reason: 'already_authenticated_session',
         requestedChanges: {
           adminToken: Boolean(next.newAdminToken),
           mcpAuthToken: Boolean(next.newMcpAuthToken || next.clearMcpAuthToken),
           rotateSessionSecret: Boolean(next.rotateSessionSecret)
         }
       });
-      res.status(401).json({
-        error: {
-          code: 'ADMIN_TOKEN_CONFIRM_REQUIRED',
-          message: '需要输入当前 Admin Token 才能修改安全设置'
-        }
-      });
-      return;
     }
 
     const adminTokenChanged = Boolean(next.newAdminToken);
@@ -2224,6 +2219,11 @@ export function createApp(userConfig = {}) {
         adminToken: Boolean(process.env.ADMIN_TOKEN),
         sessionSecret: Boolean(process.env.SESSION_SECRET),
         mcpAuthToken: Boolean(process.env.MCP_AUTH_TOKEN)
+      },
+      confirmation: {
+        required: false,
+        provided: currentTokenProvided,
+        matched: currentTokenMatches
       }
     });
 
@@ -2238,6 +2238,11 @@ export function createApp(userConfig = {}) {
         adminToken: Boolean(process.env.ADMIN_TOKEN),
         sessionSecret: Boolean(process.env.SESSION_SECRET),
         mcpAuthToken: Boolean(process.env.MCP_AUTH_TOKEN)
+      },
+      confirmation: {
+        required: false,
+        provided: currentTokenProvided,
+        matched: currentTokenMatches
       }
     });
   }));

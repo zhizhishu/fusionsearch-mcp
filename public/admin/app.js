@@ -510,6 +510,7 @@ async function rotateAdminSecurity() {
     ok: payload.ok,
     adminRequiresLogin: payload.adminRequiresLogin,
     auth: payload.auth,
+    confirmation: payload.confirmation,
     note: 'Token 已写入运行配置；Hugging Face 免费 Space 重启后仍建议同步更新 Settings Secrets。'
   });
   if (payload.adminRequiresLogin) {
@@ -532,6 +533,7 @@ async function rotateMcpSecurity() {
   renderOutput({
     ok: payload.ok,
     auth: payload.auth,
+    confirmation: payload.confirmation,
     note: 'MCP 客户端需要同步替换 Bearer Token。'
   });
   await loadConfig();
