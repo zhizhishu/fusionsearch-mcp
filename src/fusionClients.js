@@ -1,10 +1,15 @@
 import { mergeSources, splitAnswerAndSources } from './sourceCache.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const DEFAULT_GUDA_BASE_URL = 'https://code.guda.studio';
 const DEFAULT_GROK_MODEL = 'grok-4.20-beta';
 const DEFAULT_TAVILY_API_URL = 'https://api.tavily.com';
+const DEFAULT_TAVILY_MCP_URL = 'https://tavily.ivanli.cc/mcp';
 const DEFAULT_FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v2';
 const DEFAULT_TIMEOUT_MS = 60_000;
+const TAVILY_PROVIDER_REST = 'rest';
+const TAVILY_PROVIDER_MCP = 'mcp';
 
 export const DEFAULT_GROK_SYSTEM_PROMPT = [
   'You are FusionSearch MCP, a careful web research assistant.',
@@ -19,6 +24,8 @@ export function resolveFusionConfig(config = {}) {
   const gudaApiKey = config.gudaApiKey || '';
   const grokApiUrl = config.grokApiUrl || (gudaApiKey ? `${gudaBaseUrl}/grok/v1` : '');
   const grokApiKey = config.grokApiKey || gudaApiKey || '';
+  const tavilyMcpToken = config.tavilyMcpToken || config.tavilyHikariToken || '';
+  const tavilyMcpUrl = config.tavilyMcpUrl || config.tavilyHikariUrl || (tavilyMcpToken ? DEFAULT_TAVILY_MCP_URL : '');
   const tavilyApiUrl = resolveProviderUrl({
     configuredUrl: config.tavilyApiUrl,
     defaultUrl: DEFAULT_TAVILY_API_URL,
@@ -27,6 +34,10 @@ export function resolveFusionConfig(config = {}) {
     providerApiKey: config.tavilyApiKey
   });
   const tavilyApiKey = config.tavilyApiKey || gudaApiKey || '';
+  const tavilyProvider = resolveTavilyProvider(config.tavilyProvider, {
+    tavilyMcpUrl,
+    tavilyMcpToken
+  });
   const firecrawlApiUrl = resolveProviderUrl({
     configuredUrl: config.firecrawlApiUrl,
     defaultUrl: DEFAULT_FIRECRAWL_API_URL,
@@ -44,12 +55,26 @@ export function resolveFusionConfig(config = {}) {
     grokApiKey,
     grokModel: applyModelSuffix(config.grokModel || DEFAULT_GROK_MODEL, grokApiUrl),
     tavilyEnabled,
+    tavilyProvider,
     tavilyApiUrl,
     tavilyApiKey,
+    tavilyMcpUrl,
+    tavilyMcpToken,
+    tavilyMcpSearchTool: config.tavilyMcpSearchTool || '',
+    tavilyMcpExtractTool: config.tavilyMcpExtractTool || '',
+    tavilyMcpMapTool: config.tavilyMcpMapTool || '',
     firecrawlApiUrl,
     firecrawlApiKey,
     grokSystemPrompt: config.grokSystemPrompt || DEFAULT_GROK_SYSTEM_PROMPT
   };
+}
+
+function resolveTavilyProvider(value, { tavilyMcpUrl, tavilyMcpToken }) {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if ([TAVILY_PROVIDER_REST, TAVILY_PROVIDER_MCP].includes(normalized)) {
+    return normalized;
+  }
+  return tavilyMcpUrl || tavilyMcpToken ? TAVILY_PROVIDER_MCP : TAVILY_PROVIDER_REST;
 }
 
 function resolveProviderUrl({ configuredUrl, defaultUrl, gudaUrl, gudaApiKey, providerApiKey }) {
@@ -67,12 +92,19 @@ export function getFusionPublicConfig(config = {}) {
     grokApiUrl: resolved.grokApiUrl,
     grokModel: resolved.grokModel,
     tavilyEnabled: resolved.tavilyEnabled,
+    tavilyProvider: resolved.tavilyProvider,
     tavilyApiUrl: resolved.tavilyApiUrl,
+    tavilyMcpUrl: resolved.tavilyMcpUrl,
+    tavilyMcpSearchTool: resolved.tavilyMcpSearchTool,
+    tavilyMcpExtractTool: resolved.tavilyMcpExtractTool,
+    tavilyMcpMapTool: resolved.tavilyMcpMapTool,
     firecrawlApiUrl: resolved.firecrawlApiUrl,
     grokSystemPrompt: resolved.grokSystemPrompt,
     hasGudaApiKey: Boolean(resolved.gudaApiKey),
     hasGrokApiKey: Boolean(resolved.grokApiKey),
     hasTavilyApiKey: Boolean(resolved.tavilyApiKey),
+    hasTavilyMcpToken: Boolean(resolved.tavilyMcpToken),
+    hasTavilyCredentials: hasTavilyAccess(resolved),
     hasFirecrawlApiKey: Boolean(resolved.firecrawlApiKey)
   };
 }
@@ -140,10 +172,10 @@ export async function fetchAvailableModels({ config, timeoutMs = 10_000 }) {
 
 export async function executeTavilyFetch({ config, url, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   const resolved = resolveFusionConfig(config);
-  if (resolved.tavilyEnabled && resolved.tavilyApiKey) {
+  if (resolved.tavilyEnabled && hasTavilyAccess(resolved)) {
     const content = await tavilyExtract(resolved, url, timeoutMs).catch(() => '');
     if (content) {
-      return { provider: 'tavily', content };
+      return { provider: resolved.tavilyProvider === TAVILY_PROVIDER_MCP ? 'tavily-mcp' : 'tavily', content };
     }
   }
 
@@ -154,7 +186,7 @@ export async function executeTavilyFetch({ config, url, timeoutMs = DEFAULT_TIME
     }
   }
 
-  if (!resolved.tavilyApiKey && !resolved.firecrawlApiKey) {
+  if (!hasTavilyAccess(resolved) && !resolved.firecrawlApiKey) {
     throw new Error('Tavily 和 Firecrawl 均未配置，无法抓取网页正文');
   }
   throw new Error('Tavily/Firecrawl 均未能抓取该页面');
@@ -172,6 +204,16 @@ export async function executeTavilyMap({
   const resolved = resolveFusionConfig(config);
   if (!resolved.tavilyEnabled) {
     throw new Error('Tavily 当前已关闭');
+  }
+  if (resolved.tavilyProvider === TAVILY_PROVIDER_MCP) {
+    return tavilyMcpMap(resolved, {
+      url,
+      instructions,
+      maxDepth,
+      maxBreadth,
+      limit,
+      timeout
+    });
   }
   assertConfigured(resolved.tavilyApiKey, 'Tavily API Key 未配置');
 
@@ -227,7 +269,7 @@ export async function buildFusionConfigInfo({ config, testConnection = false }) 
 
 async function collectExtraSources(resolved, query, count) {
   const tasks = [];
-  if (resolved.tavilyEnabled && resolved.tavilyApiKey) {
+  if (resolved.tavilyEnabled && hasTavilyAccess(resolved)) {
     tasks.push(tavilySearch(resolved, query, count));
   }
   if (resolved.firecrawlApiKey) {
@@ -244,6 +286,9 @@ async function collectExtraSources(resolved, query, count) {
 }
 
 async function tavilySearch(resolved, query, maxResults) {
+  if (resolved.tavilyProvider === TAVILY_PROVIDER_MCP) {
+    return tavilyMcpSearch(resolved, query, maxResults);
+  }
   const data = await postJson(`${trimSlash(resolved.tavilyApiUrl)}/search`, {
     headers: authHeaders(resolved.tavilyApiKey),
     body: {
@@ -282,6 +327,9 @@ async function firecrawlSearch(resolved, query, limit) {
 }
 
 async function tavilyExtract(resolved, url, timeoutMs) {
+  if (resolved.tavilyProvider === TAVILY_PROVIDER_MCP) {
+    return tavilyMcpExtract(resolved, url, timeoutMs);
+  }
   const data = await postJson(`${trimSlash(resolved.tavilyApiUrl)}/extract`, {
     headers: authHeaders(resolved.tavilyApiKey),
     body: { urls: [url], format: 'markdown' },
@@ -290,6 +338,256 @@ async function tavilyExtract(resolved, url, timeoutMs) {
   const first = Array.isArray(data?.results) ? data.results[0] : null;
   const content = first?.raw_content || first?.content || '';
   return typeof content === 'string' ? content.trim() : '';
+}
+
+async function tavilyMcpSearch(resolved, query, maxResults) {
+  const { toolName, payload } = await callTavilyMcpTool(
+    resolved,
+    'search',
+    { query, maxResults },
+    90_000
+  );
+  return normalizeTavilySources(payload, 'tavily-mcp', toolName).slice(0, maxResults);
+}
+
+async function tavilyMcpExtract(resolved, url, timeoutMs) {
+  const { payload } = await callTavilyMcpTool(
+    resolved,
+    'extract',
+    { url },
+    timeoutMs
+  );
+  return extractTavilyContent(payload);
+}
+
+async function tavilyMcpMap(resolved, values) {
+  const { toolName, payload } = await callTavilyMcpTool(
+    resolved,
+    'map',
+    values,
+    (values.timeout + 10) * 1000
+  );
+  return {
+    baseUrl: payload?.base_url || payload?.baseUrl || values.url,
+    results: normalizeTavilyMapResults(payload),
+    responseTime: payload?.response_time ?? payload?.responseTime ?? null,
+    payload: {
+      provider: 'tavily-mcp',
+      toolName,
+      data: payload
+    }
+  };
+}
+
+async function callTavilyMcpTool(resolved, intent, values, timeoutMs) {
+  assertConfigured(resolved.tavilyMcpUrl, 'Tavily MCP URL is not configured');
+  assertConfigured(resolved.tavilyMcpToken, 'Tavily MCP bearer token is not configured');
+
+  const client = new Client({
+    name: 'fusionsearch-mcp',
+    version: '1.0.0'
+  });
+  const transport = new StreamableHTTPClientTransport(new URL(resolved.tavilyMcpUrl), {
+    requestInit: {
+      headers: {
+        Authorization: `Bearer ${resolved.tavilyMcpToken}`
+      }
+    }
+  });
+
+  try {
+    await client.connect(transport, { timeout: Math.min(timeoutMs, 15_000) });
+    const listed = await client.listTools(undefined, { timeout: Math.min(timeoutMs, 20_000) });
+    const tool = selectTavilyMcpTool(listed?.tools || [], intent, resolved);
+    const result = await client.callTool(
+      {
+        name: tool.name,
+        arguments: buildTavilyMcpArguments(tool, intent, values)
+      },
+      undefined,
+      { timeout: timeoutMs }
+    );
+    if (result?.isError) {
+      throw new Error(extractMcpErrorText(result) || `Tavily MCP tool ${tool.name} returned an error`);
+    }
+    return {
+      toolName: tool.name,
+      payload: extractMcpPayload(result)
+    };
+  } finally {
+    await client.close().catch(() => {});
+  }
+}
+
+function selectTavilyMcpTool(tools, intent, resolved) {
+  const overrideKey = {
+    search: 'tavilyMcpSearchTool',
+    extract: 'tavilyMcpExtractTool',
+    map: 'tavilyMcpMapTool'
+  }[intent];
+  const override = (resolved[overrideKey] || '').trim();
+  if (override) {
+    const matched = tools.find((tool) => tool.name === override);
+    if (matched) return matched;
+    throw new Error(`Tavily MCP tool "${override}" was not found. Available tools: ${tools.map((tool) => tool.name).join(', ') || 'none'}`);
+  }
+
+  const exactNames = {
+    search: ['tavily_search', 'search', 'web_search'],
+    extract: ['tavily_extract', 'extract', 'web_fetch', 'fetch', 'scrape'],
+    map: ['tavily_map', 'map', 'web_map', 'site_map']
+  }[intent];
+  const exact = tools.find((tool) => exactNames.includes(tool.name));
+  if (exact) return exact;
+
+  const hints = {
+    search: ['search'],
+    extract: ['extract', 'fetch', 'scrape'],
+    map: ['map', 'crawl']
+  }[intent];
+  const scored = tools
+    .map((tool) => ({
+      tool,
+      score: hints.reduce((sum, hint) => sum + (tool.name.toLowerCase().includes(hint) ? 1 : 0), 0)
+    }))
+    .sort((a, b) => b.score - a.score);
+  if (scored[0]?.score > 0) return scored[0].tool;
+
+  throw new Error(`No Tavily MCP ${intent} tool found. Available tools: ${tools.map((tool) => tool.name).join(', ') || 'none'}`);
+}
+
+function buildTavilyMcpArguments(tool, intent, values) {
+  const props = tool?.inputSchema?.properties || {};
+  const hasSchema = Object.keys(props).length > 0;
+  const args = {};
+  const set = (aliases, value) => {
+    if (value === undefined || value === null || value === '') return;
+    const key = hasSchema ? aliases.find((alias) => Object.hasOwn(props, alias)) : aliases[0];
+    if (key) args[key] = value;
+  };
+
+  if (intent === 'search') {
+    set(['query', 'q', 'searchQuery'], values.query);
+    set(['max_results', 'maxResults', 'limit', 'count', 'num_results'], values.maxResults);
+    set(['search_depth', 'searchDepth'], 'advanced');
+    set(['include_raw_content', 'includeRawContent'], false);
+    set(['include_answer', 'includeAnswer'], false);
+  } else if (intent === 'extract') {
+    if (hasSchema && Object.hasOwn(props, 'urls')) {
+      args.urls = [values.url];
+    } else {
+      set(['url', 'uri'], values.url);
+      set(['urls'], [values.url]);
+    }
+    set(['format'], 'markdown');
+  } else if (intent === 'map') {
+    set(['url', 'uri'], values.url);
+    set(['instructions'], values.instructions);
+    set(['max_depth', 'maxDepth'], values.maxDepth);
+    set(['max_breadth', 'maxBreadth'], values.maxBreadth);
+    set(['limit', 'maxResults'], values.limit);
+    set(['timeout'], values.timeout);
+  }
+
+  return args;
+}
+
+function extractMcpPayload(result) {
+  if (result?.structuredContent !== undefined) return result.structuredContent;
+  const texts = Array.isArray(result?.content)
+    ? result.content
+        .filter((item) => item?.type === 'text' && typeof item.text === 'string')
+        .map((item) => item.text.trim())
+        .filter(Boolean)
+    : [];
+  for (const text of texts) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Keep looking for structured JSON text before falling back to plain text.
+    }
+  }
+  return texts.length === 1 ? { text: texts[0] } : { content: texts, text: texts.join('\n') };
+}
+
+function extractMcpErrorText(result) {
+  return Array.isArray(result?.content)
+    ? result.content
+        .filter((item) => item?.type === 'text' && typeof item.text === 'string')
+        .map((item) => item.text)
+        .join('\n')
+        .trim()
+    : '';
+}
+
+function normalizeTavilySources(payload, provider, toolName = '') {
+  return findResultArray(payload)
+    .map((item) => {
+      if (typeof item === 'string') {
+        return {
+          title: item,
+          url: item,
+          description: '',
+          provider,
+          toolName
+        };
+      }
+      return {
+        title: item?.title || item?.name || item?.url || '',
+        url: item?.url || item?.link || item?.href || '',
+        description: item?.content || item?.description || item?.snippet || item?.summary || '',
+        provider,
+        toolName,
+        score: item?.score
+      };
+    })
+    .filter((item) => item.url || item.title || item.description);
+}
+
+function normalizeTavilyMapResults(payload) {
+  return findResultArray(payload)
+    .map((item) => (typeof item === 'string' ? item : item?.url || item?.link || item?.href || item))
+    .filter(Boolean);
+}
+
+function findResultArray(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== 'object') return [];
+  const candidates = [
+    payload.results,
+    payload.urls,
+    payload.links,
+    payload.items,
+    payload.sources,
+    payload.data?.web,
+    payload.data?.results,
+    payload.data
+  ];
+  return candidates.find((value) => Array.isArray(value)) || [];
+}
+
+function extractTavilyContent(payload) {
+  if (typeof payload === 'string') return payload.trim();
+  const first = Array.isArray(payload?.results) ? payload.results[0] : null;
+  const content =
+    first?.raw_content ||
+    first?.rawContent ||
+    first?.content ||
+    first?.markdown ||
+    payload?.raw_content ||
+    payload?.rawContent ||
+    payload?.content ||
+    payload?.markdown ||
+    payload?.text ||
+    '';
+  return typeof content === 'string' ? content.trim() : '';
+}
+
+function hasTavilyAccess(resolved) {
+  if (resolved.tavilyProvider === TAVILY_PROVIDER_MCP) {
+    return Boolean(resolved.tavilyMcpUrl && resolved.tavilyMcpToken);
+  }
+  return Boolean(resolved.tavilyApiKey);
 }
 
 async function firecrawlScrape(resolved, url, timeoutMs) {

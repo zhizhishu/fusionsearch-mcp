@@ -269,9 +269,17 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4ZM4 12l8 4 8-4M4 17l8 4 8-4" /></svg>
                 <h2>Tavily</h2>
               </div>
+              <p class="panel-note">可选择官方 REST，也可选择第三方 Tavily MCP/Hikari。MCP 模式会自动发现 search/extract/map 工具，必要时再填写工具名覆盖。</p>
               <label class="check-row">
                 <input id="tavilyEnabled" type="checkbox" />
                 <span>启用 Tavily</span>
+              </label>
+              <label class="field">
+                <span>Provider</span>
+                <select id="tavilyProvider">
+                  <option value="rest">Official REST</option>
+                  <option value="mcp">Third-party MCP / Hikari</option>
+                </select>
               </label>
               <label class="field">
                 <span>Tavily API URL</span>
@@ -285,6 +293,32 @@
                 <input id="clearTavilyApiKey" type="checkbox" />
                 <span>清空 Tavily Key</span>
               </label>
+              <label class="field">
+                <span>Tavily MCP URL</span>
+                <input id="tavilyMcpUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://tavily.ivanli.cc/mcp" />
+              </label>
+              <label class="field">
+                <span>Tavily MCP Token</span>
+                <input id="tavilyMcpToken" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+              </label>
+              <label class="check-row">
+                <input id="clearTavilyMcpToken" type="checkbox" />
+                <span>清空 MCP Token</span>
+              </label>
+              <div class="field-grid span-2">
+                <label class="field">
+                  <span>Search Tool</span>
+                  <input id="tavilyMcpSearchTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                </label>
+                <label class="field">
+                  <span>Extract Tool</span>
+                  <input id="tavilyMcpExtractTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                </label>
+                <label class="field">
+                  <span>Map Tool</span>
+                  <input id="tavilyMcpMapTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                </label>
+              </div>
             </section>
 
             <section class="panel view-panel" data-group-panel="fusion" data-view-panel="firecrawl" hidden>
@@ -371,6 +405,14 @@
                 <input id="rotateSessionSecret" type="checkbox" checked />
                 <span>同时轮换 Session Secret，让旧登录立即失效</span>
               </label>
+              <label class="check-row">
+                <input id="syncSecurityHfSecrets" type="checkbox" checked />
+                <span>同步写入 Hugging Face Secrets，防止 Space 重启恢复旧口令</span>
+              </label>
+              <label class="field">
+                <span>一次性 HF Write Token</span>
+                <input id="securityHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
+              </label>
               <div class="test-row">
                 <button class="primary-button" id="rotateSecurity">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
@@ -397,6 +439,14 @@
               <label class="check-row">
                 <input id="clearMcpAuthToken" type="checkbox" />
                 <span>清空 MCP Token，关闭 MCP 鉴权</span>
+              </label>
+              <label class="check-row">
+                <input id="syncMcpHfSecrets" type="checkbox" checked />
+                <span>同步写入 Hugging Face Secrets，防止 Space 重启恢复旧 Bearer</span>
+              </label>
+              <label class="field">
+                <span>一次性 HF Write Token</span>
+                <input id="mcpHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
               </label>
               <div class="test-row">
                 <button class="primary-button" id="rotateMcpSecurity">

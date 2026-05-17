@@ -57,9 +57,16 @@ const fields = {
   grokSystemPrompt: $('#grokSystemPrompt'),
   resetGrokPrompt: $('#resetGrokPrompt'),
   tavilyEnabled: $('#tavilyEnabled'),
+  tavilyProvider: $('#tavilyProvider'),
   tavilyApiUrl: $('#tavilyApiUrl'),
   tavilyApiKey: $('#tavilyApiKey'),
   clearTavilyApiKey: $('#clearTavilyApiKey'),
+  tavilyMcpUrl: $('#tavilyMcpUrl'),
+  tavilyMcpToken: $('#tavilyMcpToken'),
+  clearTavilyMcpToken: $('#clearTavilyMcpToken'),
+  tavilyMcpSearchTool: $('#tavilyMcpSearchTool'),
+  tavilyMcpExtractTool: $('#tavilyMcpExtractTool'),
+  tavilyMcpMapTool: $('#tavilyMcpMapTool'),
   firecrawlApiUrl: $('#firecrawlApiUrl'),
   firecrawlApiKey: $('#firecrawlApiKey'),
   clearFirecrawlApiKey: $('#clearFirecrawlApiKey'),
@@ -89,8 +96,12 @@ const fields = {
   currentMcpAdminToken: $('#currentMcpAdminToken'),
   newAdminToken: $('#newAdminToken'),
   rotateSessionSecret: $('#rotateSessionSecret'),
+  syncSecurityHfSecrets: $('#syncSecurityHfSecrets'),
+  securityHfToken: $('#securityHfToken'),
   newMcpAuthToken: $('#newMcpAuthToken'),
   clearMcpAuthToken: $('#clearMcpAuthToken'),
+  syncMcpHfSecrets: $('#syncMcpHfSecrets'),
+  mcpHfToken: $('#mcpHfToken'),
   securityHint: $('#securityHint'),
   adminEnvState: $('#adminEnvState'),
   mcpEnvState: $('#mcpEnvState'),
@@ -125,7 +136,7 @@ function renderOutput(value) {
 function formatFusionKeyState(fusion = {}) {
   const providers = [
     fusion.hasGrokApiKey ? 'Grok' : '',
-    fusion.hasTavilyApiKey ? 'Tavily' : '',
+    fusion.hasTavilyCredentials ? `Tavily ${fusion.tavilyProvider === 'mcp' ? 'MCP' : 'REST'}` : '',
     fusion.hasFirecrawlApiKey ? 'Firecrawl' : ''
   ].filter(Boolean);
   return providers.length ? `${providers.join(' / ')} 已配置` : '未配置';
@@ -321,7 +332,12 @@ async function loadConfig() {
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
   fields.grokSystemPrompt.value = config.fusion?.grokSystemPrompt || defaultGrokSystemPrompt;
   fields.tavilyEnabled.checked = config.fusion?.tavilyEnabled !== false;
+  fields.tavilyProvider.value = config.fusion?.tavilyProvider || 'rest';
   fields.tavilyApiUrl.value = config.fusion?.tavilyApiUrl || 'https://api.tavily.com';
+  fields.tavilyMcpUrl.value = config.fusion?.tavilyMcpUrl || '';
+  fields.tavilyMcpSearchTool.value = config.fusion?.tavilyMcpSearchTool || '';
+  fields.tavilyMcpExtractTool.value = config.fusion?.tavilyMcpExtractTool || '';
+  fields.tavilyMcpMapTool.value = config.fusion?.tavilyMcpMapTool || '';
   fields.firecrawlApiUrl.value = config.fusion?.firecrawlApiUrl || 'https://api.firecrawl.dev/v2';
   fields.searchShApiKey.value = '';
   fields.clearSearchShApiKey.checked = false;
@@ -345,9 +361,16 @@ async function saveConfig() {
     grokModel: fields.grokModel.value.trim() || 'grok-4.20-beta',
     grokSystemPrompt: fields.grokSystemPrompt.value.trim() || defaultGrokSystemPrompt,
     tavilyEnabled: fields.tavilyEnabled.checked,
+    tavilyProvider: fields.tavilyProvider.value,
     tavilyApiUrl: fields.tavilyApiUrl.value.trim(),
     tavilyApiKey: fields.tavilyApiKey.value,
     clearTavilyApiKey: fields.clearTavilyApiKey.checked,
+    tavilyMcpUrl: fields.tavilyMcpUrl.value.trim(),
+    tavilyMcpToken: fields.tavilyMcpToken.value,
+    clearTavilyMcpToken: fields.clearTavilyMcpToken.checked,
+    tavilyMcpSearchTool: fields.tavilyMcpSearchTool.value.trim(),
+    tavilyMcpExtractTool: fields.tavilyMcpExtractTool.value.trim(),
+    tavilyMcpMapTool: fields.tavilyMcpMapTool.value.trim(),
     firecrawlApiUrl: fields.firecrawlApiUrl.value.trim(),
     firecrawlApiKey: fields.firecrawlApiKey.value,
     clearFirecrawlApiKey: fields.clearFirecrawlApiKey.checked,
@@ -499,11 +522,14 @@ async function rotateAdminSecurity() {
   const body = {
     currentAdminToken: fields.currentAdminToken.value,
     newAdminToken: fields.newAdminToken.value.trim() || undefined,
-    rotateSessionSecret: fields.rotateSessionSecret.checked
+    rotateSessionSecret: fields.rotateSessionSecret.checked,
+    syncHfSecrets: fields.syncSecurityHfSecrets.checked,
+    hfToken: fields.securityHfToken.value.trim() || undefined
   };
   const payload = await saveSecurityPayload(body);
   fields.currentAdminToken.value = '';
   fields.newAdminToken.value = '';
+  fields.securityHfToken.value = '';
   fields.rotateSessionSecret.checked = true;
   fields.securityHint.textContent = payload.adminRequiresLogin ? '已更新，请使用新 Admin Token 重新登录' : '已更新';
   renderOutput({
@@ -511,7 +537,10 @@ async function rotateAdminSecurity() {
     adminRequiresLogin: payload.adminRequiresLogin,
     auth: payload.auth,
     confirmation: payload.confirmation,
-    note: 'Token 已写入运行配置；Hugging Face 免费 Space 重启后仍建议同步更新 Settings Secrets。'
+    hfSync: payload.hfSync,
+    note: payload.hfSync?.ok
+      ? 'Token 已同步到 Hugging Face Secrets，Space 重启后不会恢复旧口令。'
+      : 'Token 已写入当前运行时；如果 HF Secrets 未同步，Space 重启后仍会读取旧环境变量。'
   });
   if (payload.adminRequiresLogin) {
     await refreshSession();
@@ -524,17 +553,23 @@ async function rotateMcpSecurity() {
   const body = {
     currentAdminToken: fields.currentMcpAdminToken.value,
     newMcpAuthToken: fields.newMcpAuthToken.value.trim() || undefined,
-    clearMcpAuthToken: fields.clearMcpAuthToken.checked
+    clearMcpAuthToken: fields.clearMcpAuthToken.checked,
+    syncHfSecrets: fields.syncMcpHfSecrets.checked,
+    hfToken: fields.mcpHfToken.value.trim() || undefined
   };
   const payload = await saveSecurityPayload(body);
   fields.currentMcpAdminToken.value = '';
   fields.newMcpAuthToken.value = '';
+  fields.mcpHfToken.value = '';
   fields.clearMcpAuthToken.checked = false;
   renderOutput({
     ok: payload.ok,
     auth: payload.auth,
     confirmation: payload.confirmation,
-    note: 'MCP 客户端需要同步替换 Bearer Token。'
+    hfSync: payload.hfSync,
+    note: payload.hfSync?.ok
+      ? 'MCP Token 已同步到 Hugging Face Secrets，客户端也要同步替换 Bearer Token。'
+      : 'MCP Token 已写入当前运行时；如果 HF Secrets 未同步，Space 重启后可能恢复旧 Bearer。'
   });
   await loadConfig();
 }
@@ -655,10 +690,12 @@ function resetFusionSecrets() {
   fields.gudaApiKey.value = '';
   fields.grokApiKey.value = '';
   fields.tavilyApiKey.value = '';
+  fields.tavilyMcpToken.value = '';
   fields.firecrawlApiKey.value = '';
   fields.clearGudaApiKey.checked = false;
   fields.clearGrokApiKey.checked = false;
   fields.clearTavilyApiKey.checked = false;
+  fields.clearTavilyMcpToken.checked = false;
   fields.clearFirecrawlApiKey.checked = false;
 }
 

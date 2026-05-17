@@ -41,8 +41,14 @@ export const DEFAULT_CONFIG = {
   grokModel: 'grok-4.20-beta',
   grokSystemPrompt: DEFAULT_GROK_SYSTEM_PROMPT,
   tavilyEnabled: true,
+  tavilyProvider: 'rest',
   tavilyApiUrl: 'https://api.tavily.com',
   tavilyApiKey: '',
+  tavilyMcpUrl: '',
+  tavilyMcpToken: '',
+  tavilyMcpSearchTool: '',
+  tavilyMcpExtractTool: '',
+  tavilyMcpMapTool: '',
   firecrawlApiUrl: 'https://api.firecrawl.dev/v2',
   firecrawlApiKey: '',
   hfEndpoint: 'https://huggingface.co',
@@ -76,8 +82,15 @@ const HF_SECRET_OPTIONS = [
   { key: 'GROK_MODEL', label: 'Grok model', multiline: false },
   { key: 'GROK_SYSTEM_PROMPT', label: 'Grok system prompt', multiline: true },
   { key: 'TAVILY_ENABLED', label: 'Tavily enabled', multiline: false },
+  { key: 'TAVILY_PROVIDER', label: 'Tavily provider: rest or mcp', multiline: false },
   { key: 'TAVILY_API_URL', label: 'Tavily API URL', multiline: false },
   { key: 'TAVILY_API_KEY', label: 'Tavily API key', multiline: false },
+  { key: 'TAVILY_MCP_URL', label: 'Tavily MCP URL', multiline: false },
+  { key: 'TAVILY_MCP_TOKEN', label: 'Tavily MCP bearer token', multiline: false },
+  { key: 'TAVILY_HIKARI_TOKEN', label: 'Tavily Hikari bearer token alias', multiline: false },
+  { key: 'TAVILY_MCP_SEARCH_TOOL', label: 'Tavily MCP search tool override', multiline: false },
+  { key: 'TAVILY_MCP_EXTRACT_TOOL', label: 'Tavily MCP extract tool override', multiline: false },
+  { key: 'TAVILY_MCP_MAP_TOOL', label: 'Tavily MCP map tool override', multiline: false },
   { key: 'FIRECRAWL_API_URL', label: 'Firecrawl API URL', multiline: false },
   { key: 'FIRECRAWL_API_KEY', label: 'Firecrawl API key', multiline: false },
   { key: 'RUNTIME_CONFIG_PATH', label: 'Runtime config path', multiline: false },
@@ -144,9 +157,16 @@ const adminConfigUpdateSchema = z.object({
   grokModel: z.string().trim().optional(),
   grokSystemPrompt: z.string().trim().optional(),
   tavilyEnabled: z.boolean().optional(),
+  tavilyProvider: z.enum(['rest', 'mcp']).optional(),
   tavilyApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
   tavilyApiKey: z.string().optional(),
   clearTavilyApiKey: z.boolean().optional(),
+  tavilyMcpUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
+  tavilyMcpToken: z.string().optional(),
+  clearTavilyMcpToken: z.boolean().optional(),
+  tavilyMcpSearchTool: z.string().trim().optional(),
+  tavilyMcpExtractTool: z.string().trim().optional(),
+  tavilyMcpMapTool: z.string().trim().optional(),
   firecrawlApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
   firecrawlApiKey: z.string().optional(),
   clearFirecrawlApiKey: z.boolean().optional(),
@@ -163,7 +183,9 @@ const adminSecurityUpdateSchema = z.object({
   newAdminToken: optionalTokenSchema,
   newMcpAuthToken: optionalTokenSchema,
   clearMcpAuthToken: z.boolean().optional(),
-  rotateSessionSecret: z.boolean().optional()
+  rotateSessionSecret: z.boolean().optional(),
+  syncHfSecrets: z.boolean().optional(),
+  hfToken: z.string().trim().optional()
 }).refine((input) => (
   Boolean(input.newAdminToken || input.newMcpAuthToken || input.clearMcpAuthToken || input.rotateSessionSecret)
 ), {
@@ -551,6 +573,27 @@ async function requestHfJson(config, { method = 'GET', token, body } = {}) {
     throw error;
   }
   return payload;
+}
+
+async function writeHfSecrets(config, { token, secrets }) {
+  const results = [];
+  for (const item of secrets) {
+    try {
+      await requestHfJson(config, {
+        method: 'POST',
+        token,
+        body: {
+          key: item.key,
+          value: item.value,
+          description: item.description || HF_SECRET_OPTIONS.find((option) => option.key === item.key)?.label || ''
+        }
+      });
+      results.push({ key: item.key, ok: true });
+    } catch (error) {
+      results.push({ key: item.key, ok: false, error: formatHfApiError(error) });
+    }
+  }
+  return results;
 }
 
 function formatHfApiError(error) {
@@ -2084,7 +2127,10 @@ export function createApp(userConfig = {}) {
       grokApiKey: Boolean(process.env.GROK_API_KEY),
       grokModel: Boolean(process.env.GROK_MODEL),
       grokSystemPrompt: Boolean(process.env.GROK_SYSTEM_PROMPT),
+      tavilyProvider: Boolean(process.env.TAVILY_PROVIDER || process.env.TAVILY_MODE),
       tavilyApiKey: Boolean(process.env.TAVILY_API_KEY),
+      tavilyMcpUrl: Boolean(process.env.TAVILY_MCP_URL),
+      tavilyMcpToken: Boolean(process.env.TAVILY_MCP_TOKEN || process.env.TAVILY_HIKARI_TOKEN),
       firecrawlApiKey: Boolean(process.env.FIRECRAWL_API_KEY),
       hfWriteToken: Boolean(process.env.HF_WRITE_TOKEN),
       hfSpaceId: Boolean(resolveHfSpaceId(config))
@@ -2123,8 +2169,14 @@ export function createApp(userConfig = {}) {
       grokModel: config.grokModel,
       grokSystemPrompt: config.grokSystemPrompt,
       tavilyEnabled: config.tavilyEnabled,
+      tavilyProvider: config.tavilyProvider,
       tavilyApiUrl: config.tavilyApiUrl,
       tavilyApiKey: config.tavilyApiKey,
+      tavilyMcpUrl: config.tavilyMcpUrl,
+      tavilyMcpToken: config.tavilyMcpToken,
+      tavilyMcpSearchTool: config.tavilyMcpSearchTool,
+      tavilyMcpExtractTool: config.tavilyMcpExtractTool,
+      tavilyMcpMapTool: config.tavilyMcpMapTool,
       firecrawlApiUrl: config.firecrawlApiUrl,
       firecrawlApiKey: config.firecrawlApiKey,
       defaultParams: config.defaultParams
@@ -2204,6 +2256,57 @@ export function createApp(userConfig = {}) {
     });
     await persistConfig();
 
+    const hfSyncRequested = Boolean(next.syncHfSecrets || next.hfToken || process.env.HF_WRITE_TOKEN);
+    const hfSync = {
+      requested: hfSyncRequested,
+      ok: false,
+      updatedKeys: [],
+      skippedKeys: [],
+      results: [],
+      error: null
+    };
+    if (hfSyncRequested) {
+      const token = resolveHfWriteToken(next.hfToken);
+      const spaceId = resolveHfSpaceId(config);
+      const secrets = [];
+      if (adminTokenChanged) {
+        secrets.push({
+          key: 'ADMIN_TOKEN',
+          value: config.adminToken,
+          description: 'Admin login token'
+        });
+      }
+      if (next.rotateSessionSecret || adminTokenChanged) {
+        secrets.push({
+          key: 'SESSION_SECRET',
+          value: config.sessionSecret,
+          description: 'Session signing secret'
+        });
+      }
+      if (next.newMcpAuthToken) {
+        secrets.push({
+          key: 'MCP_AUTH_TOKEN',
+          value: config.mcpAuthToken,
+          description: 'MCP bearer token'
+        });
+      }
+      if (next.clearMcpAuthToken) {
+        hfSync.skippedKeys.push('MCP_AUTH_TOKEN');
+      }
+
+      if (!spaceId) {
+        hfSync.error = { code: 'HF_SPACE_ID_MISSING', message: 'HF_SPACE_ID/SPACE_ID is not configured' };
+      } else if (!token) {
+        hfSync.error = { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN is not configured' };
+      } else if (secrets.length) {
+        hfSync.results = await writeHfSecrets(config, { token, secrets });
+        hfSync.updatedKeys = hfSync.results.filter((item) => item.ok).map((item) => item.key);
+        hfSync.ok = hfSync.results.every((item) => item.ok);
+      } else {
+        hfSync.ok = true;
+      }
+    }
+
     if (adminRequiresLogin) {
       auth.clearSession(req, res);
     }
@@ -2224,6 +2327,14 @@ export function createApp(userConfig = {}) {
         required: false,
         provided: currentTokenProvided,
         matched: currentTokenMatches
+      },
+      hfSync: {
+        requested: hfSync.requested,
+        ok: hfSync.ok,
+        updatedKeys: hfSync.updatedKeys,
+        skippedKeys: hfSync.skippedKeys,
+        error: hfSync.error,
+        failedKeys: hfSync.results.filter((item) => !item.ok).map((item) => item.key)
       }
     });
 
@@ -2243,7 +2354,8 @@ export function createApp(userConfig = {}) {
         required: false,
         provided: currentTokenProvided,
         matched: currentTokenMatches
-      }
+      },
+      hfSync
     });
   }));
 
@@ -2300,10 +2412,26 @@ export function createApp(userConfig = {}) {
     if (next.tavilyEnabled !== undefined) {
       config.tavilyEnabled = next.tavilyEnabled;
     }
+    if (next.tavilyProvider !== undefined) {
+      config.tavilyProvider = next.tavilyProvider;
+    }
     if (next.tavilyApiUrl !== undefined) {
       config.tavilyApiUrl = next.tavilyApiUrl || DEFAULT_CONFIG.tavilyApiUrl;
     }
     updateSecret(next.clearTavilyApiKey, next.tavilyApiKey, 'tavilyApiKey');
+    if (next.tavilyMcpUrl !== undefined) {
+      config.tavilyMcpUrl = next.tavilyMcpUrl || '';
+    }
+    updateSecret(next.clearTavilyMcpToken, next.tavilyMcpToken, 'tavilyMcpToken');
+    if (next.tavilyMcpSearchTool !== undefined) {
+      config.tavilyMcpSearchTool = next.tavilyMcpSearchTool || '';
+    }
+    if (next.tavilyMcpExtractTool !== undefined) {
+      config.tavilyMcpExtractTool = next.tavilyMcpExtractTool || '';
+    }
+    if (next.tavilyMcpMapTool !== undefined) {
+      config.tavilyMcpMapTool = next.tavilyMcpMapTool || '';
+    }
     if (next.firecrawlApiUrl !== undefined) {
       config.firecrawlApiUrl = next.firecrawlApiUrl || DEFAULT_CONFIG.firecrawlApiUrl;
     }
@@ -2323,7 +2451,7 @@ export function createApp(userConfig = {}) {
       search2api: Boolean(config.searchShChatEndpoint),
       fusion: {
         grok: Boolean(config.grokApiUrl || config.grokApiKey),
-        tavily: Boolean(config.tavilyApiUrl || config.tavilyApiKey),
+        tavily: Boolean(config.tavilyApiUrl || config.tavilyApiKey || config.tavilyMcpUrl || config.tavilyMcpToken),
         firecrawl: Boolean(config.firecrawlApiUrl || config.firecrawlApiKey)
       }
     });
@@ -2393,23 +2521,7 @@ export function createApp(userConfig = {}) {
       return;
     }
 
-    const results = [];
-    for (const item of input.secrets) {
-      try {
-        await requestHfJson(config, {
-          method: 'POST',
-          token,
-          body: {
-            key: item.key,
-            value: item.value,
-            description: item.description || HF_SECRET_OPTIONS.find((option) => option.key === item.key)?.label || ''
-          }
-        });
-        results.push({ key: item.key, ok: true });
-      } catch (error) {
-        results.push({ key: item.key, ok: false, error: formatHfApiError(error) });
-      }
-    }
+    const results = await writeHfSecrets(config, { token, secrets: input.secrets });
 
     const ok = results.every((item) => item.ok);
     const successfulKeys = new Set(results.filter((item) => item.ok).map((item) => item.key));

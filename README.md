@@ -153,7 +153,11 @@ GUDA_BASE_URL=https://code.guda.studio
 GUDA_API_KEY=<可选，统一派生 Grok/Tavily/Firecrawl>
 GROK_API_URL=<可选，显式 OpenAI-compatible /v1 地址>
 GROK_API_KEY=<可选>
-TAVILY_API_KEY=<可选>
+TAVILY_PROVIDER=rest
+TAVILY_API_KEY=<可选，官方 Tavily REST key>
+TAVILY_MCP_URL=<可选，第三方 Tavily MCP 地址，例如 Hikari>
+TAVILY_MCP_TOKEN=<可选，第三方 Tavily MCP Bearer Token>
+TAVILY_HIKARI_TOKEN=<可选，Hikari Token 兼容别名>
 FIRECRAWL_API_KEY=<可选>
 ```
 
@@ -172,6 +176,17 @@ HF_WRITE_TOKEN=<有该 Space 写权限的 Hugging Face token>
 
 替换 Secret 后，重启 Space 让容器重新读取环境变量。`ADMIN_TOKEN`、`SESSION_SECRET`、`MCP_AUTH_TOKEN` 在 UI 保存成功后也会同步到当前运行时：如果改了 Admin Token 或 Session Secret，当前登录会失效，需要用新口令重新登录。Admin/MCP Token 不限制固定长度，短口令可用，但公网环境仍建议使用长随机值。安全页已经登录后即可修改 Token，“当前 Admin Token”只是可选确认项，可以留空。
 
+如果只在 `/admin -> 安全` 改 Admin Token，但没有同步写入 HF Secrets，Space 重启时会重新读取 `ADMIN_TOKEN` 环境变量，所以口令会恢复成 HF Secrets 里的旧值。新版安全页默认勾选“同步写入 Hugging Face Secrets”；只要 `HF_WRITE_TOKEN` 已配置，或临时粘贴一次性 HF token，改口令就会同时更新 Space Secret，重启后不会回退。
+
+### 第三方 Tavily MCP / Hikari
+
+FusionSearch 支持两种 Tavily 来源：
+
+- `TAVILY_PROVIDER=rest`：走官方 Tavily REST，使用 `TAVILY_API_URL` / `TAVILY_API_KEY`。
+- `TAVILY_PROVIDER=mcp`：走第三方 Tavily MCP/Hikari，使用 `TAVILY_MCP_URL` / `TAVILY_MCP_TOKEN`。如果只设置了 `TAVILY_HIKARI_TOKEN` 且未指定 provider，服务会自动切到 MCP 模式，并默认使用 `https://tavily.ivanli.cc/mcp`。
+
+MCP 模式会自动发现 search / extract / map 工具。第三方网关工具名特殊时，可设置 `TAVILY_MCP_SEARCH_TOOL`、`TAVILY_MCP_EXTRACT_TOOL`、`TAVILY_MCP_MAP_TOOL` 覆盖。
+
 ### Admin 日志
 
 `/admin -> 状态 -> 日志` 可以查看 FusionSearch 自身运行日志，默认写入 `logs/fusionsearch.log`。日志会记录配置保存、安全设置、HF Secrets 更新和 Admin API 错误；Token、Cookie、API Key 等敏感字段会脱敏。
@@ -181,8 +196,8 @@ HF_WRITE_TOKEN=<有该 Space 写权限的 Hugging Face token>
 推荐新工具名少而准：
 
 - `web_search`：Grok/OpenAI-compatible AI 搜索/回答，使用 Admin UI 里配置的 Grok System Prompt。
-- `web_fetch`：Tavily Extract 抓正文，失败或空内容时降级 Firecrawl Scrape。
-- `web_map`：Tavily Map 做站点地图。
+- `web_fetch`：Tavily REST Extract 或第三方 Tavily MCP 抓正文，失败或空内容时降级 Firecrawl Scrape。
+- `web_map`：Tavily REST Map 或第三方 Tavily MCP 做站点地图。
 - `libre_search`：LibreSearch/SearXNG JSON 结构化搜索。
 - `search2api_chat`：调用 Search-2api/search.sh 返回答案。
 - `fusion_research`：LibreSearch + Search-2api 取证，再交给 Grok 汇总。
@@ -273,7 +288,11 @@ curl http://localhost:1666/search2api/v1/chat/completions \
 | `GROK_MODEL` | 默认 Grok 模型 |
 | `GROK_SYSTEM_PROMPT` | 注入给 Grok 的 system prompt |
 | `TAVILY_ENABLED` | 是否启用 Tavily |
-| `TAVILY_API_URL` / `TAVILY_API_KEY` | Tavily 配置 |
+| `TAVILY_PROVIDER` | `rest` 或 `mcp`；未设置时默认 REST，检测到 Hikari/MCP token 时自动使用 MCP |
+| `TAVILY_API_URL` / `TAVILY_API_KEY` | 官方 Tavily REST 配置 |
+| `TAVILY_MCP_URL` / `TAVILY_MCP_TOKEN` | 第三方 Tavily MCP/Hikari 配置 |
+| `TAVILY_HIKARI_TOKEN` | Hikari Bearer Token 兼容别名 |
+| `TAVILY_MCP_SEARCH_TOOL` / `TAVILY_MCP_EXTRACT_TOOL` / `TAVILY_MCP_MAP_TOOL` | 第三方 MCP 工具名覆盖，通常留空自动发现 |
 | `FIRECRAWL_API_URL` / `FIRECRAWL_API_KEY` | Firecrawl 配置 |
 | `GRANIAN_WORKERS` / `GRANIAN_BLOCKING_THREADS` | 官方 LibreSearch 镜像的 Granian 并发参数 |
 | `GRANIAN_PROCESS_NAME` | LibreSearch 运行进程名，默认 `fusionsearch-libre`，避免部分托管平台误判默认进程名 |
