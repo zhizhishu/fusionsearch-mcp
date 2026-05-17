@@ -192,6 +192,46 @@ export async function executeTavilyFetch({ config, url, timeoutMs = DEFAULT_TIME
   throw new Error('Tavily/Firecrawl 均未能抓取该页面');
 }
 
+export async function executeTavilySearchOnly({
+  config,
+  query,
+  maxResults = 5
+}) {
+  const resolved = resolveFusionConfig(config);
+  if (!resolved.tavilyEnabled) {
+    throw new Error('Tavily 当前已关闭');
+  }
+  assertConfigured(hasTavilyAccess(resolved), 'Tavily REST Key 或 MCP Token 未配置');
+  const results = await tavilySearch(resolved, query, maxResults);
+  return {
+    provider: resolved.tavilyProvider === TAVILY_PROVIDER_MCP ? 'tavily-mcp' : 'tavily',
+    results
+  };
+}
+
+export async function executeTavilyExtractOnly({ config, url, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const resolved = resolveFusionConfig(config);
+  if (!resolved.tavilyEnabled) {
+    throw new Error('Tavily 当前已关闭');
+  }
+  assertConfigured(hasTavilyAccess(resolved), 'Tavily REST Key 或 MCP Token 未配置');
+  const content = await tavilyExtract(resolved, url, timeoutMs);
+  return {
+    provider: resolved.tavilyProvider === TAVILY_PROVIDER_MCP ? 'tavily-mcp' : 'tavily',
+    content
+  };
+}
+
+export async function executeFirecrawlFetch({ config, url, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const resolved = resolveFusionConfig(config);
+  assertConfigured(resolved.firecrawlApiKey, 'Firecrawl API Key 未配置');
+  const content = await firecrawlScrape(resolved, url, timeoutMs);
+  return {
+    provider: 'firecrawl',
+    content
+  };
+}
+
 export async function executeTavilyMap({
   config,
   url,
