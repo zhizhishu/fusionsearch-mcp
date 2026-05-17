@@ -290,55 +290,78 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4-8 4-8-4 8-4ZM4 12l8 4 8-4M4 17l8 4 8-4" /></svg>
                 <h2>Tavily</h2>
               </div>
-              <p class="panel-note">可选择官方 REST，也可选择第三方 Tavily MCP/Hikari。MCP 模式会自动发现 search/extract/map 工具，必要时再填写工具名覆盖。</p>
+              <p class="panel-note">选择一个 Tavily 来源。官方 REST 可填写自定义 API 地址；自定义 MCP/Hikari 适合第三方网关，会自动发现 search/extract/map 工具。</p>
               <label class="check-row">
                 <input id="tavilyEnabled" type="checkbox" />
                 <span>启用 Tavily</span>
               </label>
-              <label class="field">
-                <span>Provider</span>
-                <select id="tavilyProvider">
-                  <option value="rest">Official REST</option>
-                  <option value="mcp">Third-party MCP / Hikari</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Tavily API URL</span>
-                <input id="tavilyApiUrl" type="url" autocomplete="off" spellcheck="false" />
-              </label>
-              <label class="field">
-                <span>Tavily API Key</span>
-                <input id="tavilyApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-              </label>
-              <label class="check-row">
-                <input id="clearTavilyApiKey" type="checkbox" />
-                <span>清空 Tavily Key</span>
-              </label>
-              <label class="field">
-                <span>Tavily MCP URL</span>
-                <input id="tavilyMcpUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://tavily.ivanli.cc/mcp" />
-              </label>
-              <label class="field">
-                <span>Tavily MCP Token</span>
-                <input id="tavilyMcpToken" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-              </label>
-              <label class="check-row">
-                <input id="clearTavilyMcpToken" type="checkbox" />
-                <span>清空 MCP Token</span>
-              </label>
-              <div class="field-grid span-2">
+
+              <select id="tavilyProvider" class="visually-hidden" aria-hidden="true" tabindex="-1">
+                <option value="rest">Official REST</option>
+                <option value="mcp">Custom MCP / Hikari</option>
+              </select>
+
+              <div class="provider-switch span-2" role="radiogroup" aria-label="Tavily 来源">
+                <label class="provider-option" data-tavily-provider-option="rest">
+                  <input type="radio" name="tavilyProviderChoice" value="rest" />
+                  <span>
+                    <strong>官方 REST</strong>
+                    <small>官方 Tavily API，支持自定义 API Base URL。</small>
+                  </span>
+                </label>
+                <label class="provider-option" data-tavily-provider-option="mcp">
+                  <input type="radio" name="tavilyProviderChoice" value="mcp" />
+                  <span>
+                    <strong>自定义 MCP / Hikari</strong>
+                    <small>第三方 Tavily MCP 地址和 Bearer Token。</small>
+                  </span>
+                </label>
+              </div>
+
+              <div class="provider-panel span-2" data-tavily-provider-panel="rest">
                 <label class="field">
-                  <span>Search Tool</span>
-                  <input id="tavilyMcpSearchTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                  <span>Tavily API URL</span>
+                  <input id="tavilyApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.tavily.com" />
+                  <small>官方默认地址可不改；镜像站或代理网关填自己的 Base URL。</small>
                 </label>
                 <label class="field">
-                  <span>Extract Tool</span>
-                  <input id="tavilyMcpExtractTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                  <span>Tavily API Key</span>
+                  <input id="tavilyApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
+                </label>
+                <label class="check-row">
+                  <input id="clearTavilyApiKey" type="checkbox" />
+                  <span>清空 Tavily REST Key</span>
+                </label>
+              </div>
+
+              <div class="provider-panel span-2" data-tavily-provider-panel="mcp" hidden>
+                <label class="field">
+                  <span>Tavily MCP URL</span>
+                  <input id="tavilyMcpUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://tavily.ivanli.cc/mcp" />
+                  <small>例如 Hikari 或你自己的 Tavily MCP 网关地址。</small>
                 </label>
                 <label class="field">
-                  <span>Map Tool</span>
-                  <input id="tavilyMcpMapTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                  <span>Tavily MCP Token</span>
+                  <input id="tavilyMcpToken" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
                 </label>
+                <label class="check-row">
+                  <input id="clearTavilyMcpToken" type="checkbox" />
+                  <span>清空 MCP Token</span>
+                </label>
+                <div class="field-grid span-2">
+                  <label class="field">
+                    <span>Search Tool</span>
+                    <input id="tavilyMcpSearchTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                  </label>
+                  <label class="field">
+                    <span>Extract Tool</span>
+                    <input id="tavilyMcpExtractTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                  </label>
+                  <label class="field">
+                    <span>Map Tool</span>
+                    <input id="tavilyMcpMapTool" type="text" autocomplete="off" spellcheck="false" placeholder="自动发现" />
+                  </label>
+                </div>
               </div>
             </section>
 

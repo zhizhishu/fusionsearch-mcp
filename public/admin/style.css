@@ -428,6 +428,76 @@ h1 {
   gap: 14px;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.provider-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 17px;
+}
+
+.provider-option {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+  padding: 14px 15px;
+  border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+  border-radius: 18px;
+  background: color-mix(in oklch, var(--muted) 24%, var(--card));
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+.provider-option:hover,
+.provider-option.active {
+  border-color: color-mix(in oklch, var(--primary) 34%, var(--border));
+  background: color-mix(in oklch, var(--primary) 5%, var(--card));
+  box-shadow: 0 10px 26px hsl(40 20% 20% / 0.06);
+}
+
+.provider-option input {
+  width: 17px;
+  min-height: 17px;
+  margin-top: 2px;
+  padding: 0;
+  accent-color: var(--primary);
+  box-shadow: none;
+}
+
+.provider-option span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.provider-option strong {
+  color: color-mix(in oklch, var(--foreground) 90%, black);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.provider-option small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.provider-panel {
+  margin-top: 14px;
+  padding: 1px 0 0;
+}
+
 .hf-secret-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -993,6 +1063,7 @@ textarea:focus {
   .field-grid,
   .hf-secret-grid,
   .key-status-grid,
+  .provider-switch,
   .monitor-head,
   .monitor-row,
   .test-row {
