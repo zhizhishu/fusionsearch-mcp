@@ -17,24 +17,29 @@ const defaultGrokSystemPrompt = [
 
 const defaultSubviews = {
   sources: 'libresearch',
-  fusion: 'grok',
+  fusion: 'keys',
   mcp: 'full',
   deploy: 'docker',
   security: 'admin',
-  tests: 'search',
-  status: 'runtime'
+  tests: 'libresearch-test',
+  status: 'monitoring'
 };
 
 const legacyRoutes = {
   libresearch: ['sources', 'libresearch'],
   search2api: ['sources', 'search2api'],
-  fusion: ['fusion', 'grok'],
+  fusion: ['fusion', 'keys'],
+  keys: ['fusion', 'keys'],
   grok: ['fusion', 'grok'],
   prompt: ['fusion', 'prompt'],
   tavily: ['fusion', 'tavily'],
   firecrawl: ['fusion', 'firecrawl'],
-  preview: ['tests', 'search'],
-  runtime: ['status', 'runtime']
+  preview: ['tests', 'libresearch-test'],
+  search: ['tests', 'libresearch-test'],
+  'fusion-test': ['tests', 'grok-test'],
+  fetch: ['tests', 'tavily-test'],
+  runtime: ['status', 'runtime'],
+  monitoring: ['status', 'monitoring']
 };
 
 const fields = {
@@ -70,6 +75,8 @@ const fields = {
   firecrawlApiUrl: $('#firecrawlApiUrl'),
   firecrawlApiKey: $('#firecrawlApiKey'),
   clearFirecrawlApiKey: $('#clearFirecrawlApiKey'),
+  keyStatusGrid: $('#keyStatusGrid'),
+  keyStatusHint: $('#keyStatusHint'),
   categories: $('#categories'),
   language: $('#language'),
   safesearch: $('#safesearch'),
@@ -77,8 +84,10 @@ const fields = {
   testQuery: $('#testQuery'),
   testPrompt: $('#testPrompt'),
   testGrokQuery: $('#testGrokQuery'),
+  testTavilyQuery: $('#testTavilyQuery'),
   testFetchUrl: $('#testFetchUrl'),
   testMapUrl: $('#testMapUrl'),
+  testFirecrawlUrl: $('#testFirecrawlUrl'),
   output: $('#testOutput'),
   runtimeStatus: $('#runtimeStatus'),
   loginPanel: $('#loginPanel'),
@@ -116,6 +125,10 @@ const fields = {
   logScope: $('#logScope'),
   logLimit: $('#logLimit'),
   logViewer: $('#logViewer'),
+  monitoringCount: $('#monitoringCount'),
+  monitorBars: $('#monitorBars'),
+  monitoringHint: $('#monitoringHint'),
+  monitoringServices: $('#monitoringServices'),
   keyState: $('#keyState'),
   fusionKeyState: $('#fusionKeyState'),
   saveHint: $('#saveHint')
@@ -178,6 +191,75 @@ function clearHfSecretInputs() {
   });
 }
 
+function renderKeyStatus(items = []) {
+  if (!fields.keyStatusGrid) return;
+  fields.keyStatusGrid.innerHTML = items.length
+    ? items.map((item) => `
+      <article class="key-status-card ${item.configured ? 'configured' : 'missing'}">
+        <div>
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${item.configured ? '已配置' : '未配置'}</strong>
+        </div>
+        <code>${escapeHtml(item.masked || '未设置')}</code>
+        <small>${escapeHtml(formatKeySource(item))}</small>
+      </article>
+    `).join('')
+    : '<div class="empty-note">暂无 Key 状态</div>';
+}
+
+function formatKeySource(item) {
+  const source = item.source || 'missing';
+  if (source === 'runtime') return 'runtime config';
+  if (source === 'missing') return 'not set';
+  const meta = item.meta || {};
+  const extra = item.id === 'search2apiCookie'
+    ? `; cf_clearance ${meta.hasCfClearance ? 'yes' : 'no'}; UA ${meta.hasUserAgent ? 'yes' : 'no'}`
+    : '';
+  return `${source}${extra}`;
+}
+
+function renderMonitoring(snapshot = {}) {
+  const services = snapshot.services || [];
+  if (fields.monitoringCount) fields.monitoringCount.textContent = String(snapshot.count ?? services.length);
+  if (fields.monitorBars) {
+    fields.monitorBars.innerHTML = services
+      .map((service) => `<span class="monitor-bar ${escapeHtml(service.status)}" title="${escapeHtml(service.name)}: ${escapeHtml(service.statusLabel)}"></span>`)
+      .join('');
+  }
+  if (fields.monitoringServices) {
+    fields.monitoringServices.innerHTML = services.length
+      ? `
+        <div class="monitor-row monitor-row-head">
+          <span>Service Name</span>
+          <span>Service Type</span>
+          <span>Service Status</span>
+          <span>Last Check</span>
+        </div>
+        ${services.map((service) => `
+          <div class="monitor-row">
+            <strong>${escapeHtml(service.name)}</strong>
+            <span>${escapeHtml(service.type)}</span>
+            <span class="service-pill ${escapeHtml(service.status)}">${escapeHtml(service.statusLabel)}</span>
+            <small>${escapeHtml(formatMonitorCheck(service))}</small>
+            <p>${escapeHtml(service.message || '')}</p>
+          </div>
+        `).join('')}
+      `
+      : '<div class="empty-note">暂无监控服务</div>';
+  }
+  if (fields.monitoringHint) {
+    const counts = snapshot.counts || {};
+    const probe = snapshot.probe?.skipped ? `；${snapshot.probe.reason}` : '';
+    fields.monitoringHint.textContent = `Up ${counts.up || 0} / Warning ${counts.warning || 0} / Down ${counts.down || 0} / Paused ${counts.paused || 0}${probe}`;
+  }
+}
+
+function formatMonitorCheck(service) {
+  const time = service.checkedAt ? formatLogTime(service.checkedAt) : 'waiting';
+  const ms = service.responseTimeMs == null ? '' : ` · ${service.responseTimeMs}ms`;
+  return `${time}${ms} · ${service.source || 'unknown'}`;
+}
+
 function hasPanel(group, subview) {
   return viewPanels.some((panel) => panel.dataset.groupPanel === group && panel.dataset.viewPanel === subview);
 }
@@ -232,6 +314,12 @@ function setActiveRoute(group, subview, updateHash = true) {
 
   if (targetGroup === 'status' && targetSubview === 'logs') {
     void loadLogs().catch(() => {});
+  }
+  if (targetGroup === 'status' && targetSubview === 'monitoring') {
+    void loadMonitoring().catch(() => {});
+  }
+  if (targetGroup === 'fusion' && targetSubview === 'keys') {
+    void loadKeyStatus().catch(() => {});
   }
 
   const nextHash = `#${targetGroup}:${targetSubview}`;
@@ -309,6 +397,7 @@ async function loadConfig() {
   if (fields.configPathMirror) fields.configPathMirror.textContent = config.runtimeConfigPath || 'memory';
   fields.keyState.textContent = config.hasSearchShApiKey ? '已配置' : '未配置';
   fields.fusionKeyState.textContent = formatFusionKeyState(config.fusion);
+  renderKeyStatus(config.keyStatus || []);
   if (fields.hfSpaceId) fields.hfSpaceId.textContent = config.hfSecrets?.spaceId || '未配置';
   if (fields.hfWriteState) {
     fields.hfWriteState.textContent = config.hfSecrets?.canWrite ? 'HF_WRITE_TOKEN 已配置' : '需要 HF_WRITE_TOKEN 或一次性 Token';
@@ -392,11 +481,36 @@ async function saveConfig() {
 
   fields.keyState.textContent = config.hasSearchShApiKey ? '已配置' : '未配置';
   fields.fusionKeyState.textContent = formatFusionKeyState(config.fusion);
+  renderKeyStatus(config.keyStatus || []);
   fields.searchShApiKey.value = '';
   fields.clearSearchShApiKey.checked = false;
   resetFusionSecrets();
   fields.saveHint.textContent = '已保存';
   setStatus('已保存', 'ok');
+}
+
+async function loadKeyStatus() {
+  const payload = await requestJson('/api/admin/keys/status');
+  renderKeyStatus(payload.keyStatus || []);
+  if (fields.keyStatusHint) fields.keyStatusHint.textContent = 'Key 状态已刷新，密钥明文不会回显。';
+}
+
+async function loadMonitoring() {
+  const payload = await requestJson('/api/admin/monitoring');
+  renderMonitoring(payload);
+  setStatus('监控已刷新', 'ok');
+}
+
+async function probeMonitoring() {
+  renderOutput('Monitoring 主动探针中...');
+  const payload = await requestJson('/api/admin/monitoring/probe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}'
+  });
+  renderMonitoring(payload);
+  renderOutput(payload);
+  setStatus(payload.probe?.skipped ? '探针冷却' : '探针完成', payload.counts?.down ? 'fail' : 'ok');
 }
 
 async function checkRuntime() {
@@ -635,7 +749,7 @@ function escapeHtml(value) {
 }
 
 async function testGrok() {
-  renderOutput('Grok / GuDa 测试中...');
+  renderOutput('Grok API 测试中...');
   const payload = await requestJson('/api/admin/test/grok', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -646,11 +760,38 @@ async function testGrok() {
     })
   });
   renderOutput(payload.ok ? payload : payload.error);
-  setStatus(payload.ok ? 'Fusion 正常' : 'Fusion 异常', payload.ok ? 'ok' : 'fail');
+  setStatus(payload.ok ? 'Grok 正常' : 'Grok 异常', payload.ok ? 'ok' : 'fail');
+}
+
+async function testTavilySearch() {
+  renderOutput('Tavily Search 测试中...');
+  const payload = await requestJson('/api/admin/test/tavily-search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: fields.testTavilyQuery.value.trim() || 'test',
+      maxResults: 5
+    })
+  });
+  renderOutput(payload.ok ? payload : payload.error);
+  setStatus(payload.ok ? 'Tavily Search 正常' : 'Tavily Search 异常', payload.ok ? 'ok' : 'fail');
+}
+
+async function testTavilyFetch() {
+  renderOutput('Tavily Fetch 测试中...');
+  const payload = await requestJson('/api/admin/test/tavily-fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: fields.testFetchUrl.value.trim()
+    })
+  });
+  renderOutput(payload.ok ? payload : payload.error);
+  setStatus(payload.ok ? 'Tavily Fetch 正常' : 'Tavily Fetch 异常', payload.ok ? 'ok' : 'fail');
 }
 
 async function testFusionFetch() {
-  renderOutput('网页抓取测试中...');
+  renderOutput('融合抓取测试中...');
   const payload = await requestJson('/api/admin/test/fusion-fetch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -659,7 +800,7 @@ async function testFusionFetch() {
     })
   });
   renderOutput(payload.ok ? payload : payload.error);
-  setStatus(payload.ok ? 'Fetch 正常' : 'Fetch 异常', payload.ok ? 'ok' : 'fail');
+  setStatus(payload.ok ? 'Fallback Fetch 正常' : 'Fallback Fetch 异常', payload.ok ? 'ok' : 'fail');
 }
 
 async function testFusionMap() {
@@ -677,6 +818,19 @@ async function testFusionMap() {
   });
   renderOutput(payload.ok ? payload : payload.error);
   setStatus(payload.ok ? 'Map 正常' : 'Map 异常', payload.ok ? 'ok' : 'fail');
+}
+
+async function testFirecrawlFetch() {
+  renderOutput('Firecrawl Scrape 测试中...');
+  const payload = await requestJson('/api/admin/test/firecrawl-fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: fields.testFirecrawlUrl.value.trim()
+    })
+  });
+  renderOutput(payload.ok ? payload : payload.error);
+  setStatus(payload.ok ? 'Firecrawl 正常' : 'Firecrawl 异常', payload.ok ? 'ok' : 'fail');
 }
 
 async function listGrokModels() {
@@ -727,16 +881,24 @@ bindAction('#checkRuntime', checkRuntime);
 bindAction('#testSearch', testSearch);
 bindAction('#testSearchSh', testSearchSh);
 bindAction('#auditSearch2api', auditSearch2api);
+bindAction('#auditSearch2apiFromTests', auditSearch2api);
 bindAction('#rotateSecurity', rotateAdminSecurity);
 bindAction('#rotateMcpSecurity', rotateMcpSecurity);
 bindAction('#loadHfSecrets', loadHfSecrets);
 bindAction('#saveHfSecrets', saveHfSecrets);
 bindAction('#loadLogs', loadLogs);
+bindAction('#refreshKeyStatus', loadKeyStatus);
+bindAction('#refreshMonitoring', loadMonitoring);
+bindAction('#probeMonitoring', probeMonitoring);
 bindAction('#testGrok', testGrok);
 bindAction('#testGrokFromPreview', testGrok);
+bindAction('#testTavilySearch', testTavilySearch);
+bindAction('#testTavilyFetch', testTavilyFetch);
 bindAction('#testFusionFetch', testFusionFetch);
 bindAction('#testFusionMap', testFusionMap);
 bindAction('#listGrokModels', listGrokModels);
+bindAction('#listGrokModelsFromTests', listGrokModels);
+bindAction('#testFirecrawlFetch', testFirecrawlFetch);
 bindAction('#resetGrokPrompt', async () => {
   fields.grokSystemPrompt.value = defaultGrokSystemPrompt;
   fields.saveHint.textContent = '提示词已恢复，保存后生效';
