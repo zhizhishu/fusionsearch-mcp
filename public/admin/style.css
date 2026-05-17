@@ -439,6 +439,176 @@ h1 {
   min-height: 118px;
 }
 
+.key-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.key-status-card {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 13px 14px;
+  border: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+  border-radius: 18px;
+  background: color-mix(in oklch, var(--muted) 28%, var(--card));
+}
+
+.key-status-card.configured {
+  border-color: color-mix(in oklch, var(--primary) 26%, var(--border));
+  background: color-mix(in oklch, var(--primary) 5%, var(--card));
+}
+
+.key-status-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.key-status-card span,
+.key-status-card small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.key-status-card strong {
+  color: color-mix(in oklch, var(--foreground) 90%, black);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.key-status-card code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: color-mix(in oklch, var(--foreground) 86%, black);
+  font: 12px/1.5 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.monitor-head {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+  border-radius: 20px;
+  background: color-mix(in oklch, var(--muted) 30%, var(--card));
+}
+
+.monitor-head strong {
+  display: block;
+  color: color-mix(in oklch, var(--foreground) 92%, black);
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 760;
+}
+
+.monitor-head span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.monitor-bars {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(22px, 1fr));
+  gap: 7px;
+}
+
+.monitor-bar {
+  height: 13px;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.monitor-bar.up,
+.service-pill.up {
+  background: color-mix(in oklch, var(--primary) 82%, white);
+  color: var(--primary-foreground);
+}
+
+.monitor-bar.warning,
+.service-pill.warning {
+  background: color-mix(in oklch, #d99a1a 74%, white);
+  color: color-mix(in oklch, var(--foreground) 88%, black);
+}
+
+.monitor-bar.down,
+.service-pill.down {
+  background: color-mix(in oklch, var(--danger) 76%, white);
+  color: white;
+}
+
+.monitor-bar.paused,
+.service-pill.paused {
+  background: color-mix(in oklch, var(--muted-foreground) 48%, white);
+  color: color-mix(in oklch, var(--foreground) 80%, black);
+}
+
+.monitor-table {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.monitor-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.1fr) minmax(110px, 0.8fr) minmax(92px, auto) minmax(150px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
+  border-radius: 17px;
+  background: color-mix(in oklch, var(--muted) 22%, var(--card));
+}
+
+.monitor-row-head {
+  min-height: 34px;
+  padding-block: 7px;
+  color: var(--muted-foreground);
+  background: transparent;
+  border-color: transparent;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.monitor-row strong,
+.monitor-row span,
+.monitor-row small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.monitor-row strong {
+  color: color-mix(in oklch, var(--foreground) 90%, black);
+}
+
+.monitor-row small,
+.monitor-row > span {
+  color: var(--muted-foreground);
+}
+
+.monitor-row p {
+  grid-column: 1 / -1;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.service-pill {
+  justify-self: start;
+  min-width: 72px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .log-toolbar {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr) 120px auto;
@@ -733,6 +903,7 @@ textarea:focus {
   }
 
   [data-view-panel="grok"] .panel-title,
+  [data-view-panel="grok"] .panel-note,
   [data-view-panel="grok"] .field:first-of-type,
   [data-view-panel="grok"] .test-row {
     grid-column: 1 / -1;
@@ -821,6 +992,9 @@ textarea:focus {
 
   .field-grid,
   .hf-secret-grid,
+  .key-status-grid,
+  .monitor-head,
+  .monitor-row,
   .test-row {
     grid-template-columns: 1fr;
   }
