@@ -264,6 +264,7 @@ http://<host>:1666/admin
 - Search-2api endpoint 与 Bearer Token。
 - All Key Control：集中填写 Grok/OpenAI-compatible、Tavily、Firecrawl，并显示脱敏 Key 状态。
 - Grok/OpenAI-compatible URL、Key、模型。
+- Grok 默认模型：保存时可同步 `GROK_MODEL` 到 Hugging Face Secrets，避免 Space 重启后恢复旧模型。
 - Grok System Prompt：真正随请求发给 Grok 的 `system` message。
 - Tavily 与 Firecrawl Key/API URL，Tavily 页提供官方 REST 与自定义 MCP/Hikari 二选一配置。
 - Admin Token、Session Secret、MCP Token 轮换。

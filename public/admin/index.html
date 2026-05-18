@@ -256,6 +256,15 @@
                   </button>
                 </div>
               </div>
+              <label class="check-row span-2">
+                <input id="syncGrokHfSecrets" type="checkbox" checked />
+                <span>保存时同步 `GROK_MODEL` 到 Hugging Face Secrets，防止 Space 重启恢复旧模型</span>
+              </label>
+              <label class="field span-2">
+                <span>一次性 HF Write Token</span>
+                <input id="grokHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
+                <small>只用于本次保存；完整 Token 不回显、不写日志。</small>
+              </label>
               <div class="test-row">
                 <button class="soft-button" id="listGrokModels">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>

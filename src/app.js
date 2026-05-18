@@ -163,6 +163,8 @@ const adminConfigUpdateSchema = z.object({
   grokApiKey: z.string().optional(),
   clearGrokApiKey: z.boolean().optional(),
   grokModel: z.string().trim().optional(),
+  syncGrokHfSecrets: z.boolean().optional(),
+  grokHfToken: z.string().trim().optional(),
   grokSystemPrompt: z.string().trim().optional(),
   tavilyEnabled: z.boolean().optional(),
   tavilyProvider: z.enum(['rest', 'mcp']).optional(),
@@ -2653,6 +2655,38 @@ export function createApp(userConfig = {}) {
     }
 
     await persistConfig();
+    const hfSyncRequested = Boolean(next.syncGrokHfSecrets || next.grokHfToken);
+    const hfSync = {
+      requested: hfSyncRequested,
+      ok: false,
+      updatedKeys: [],
+      results: [],
+      error: null
+    };
+
+    if (hfSyncRequested) {
+      const token = resolveHfWriteToken(next.grokHfToken);
+      const spaceId = resolveHfSpaceId(config);
+      if (!spaceId) {
+        hfSync.error = { code: 'HF_SPACE_ID_MISSING', message: 'HF_SPACE_ID/SPACE_ID is not configured' };
+      } else if (!token) {
+        hfSync.error = { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN is not configured' };
+      } else {
+        hfSync.results = await writeHfSecrets(config, {
+          token,
+          secrets: [
+            {
+              key: 'GROK_MODEL',
+              value: config.grokModel || DEFAULT_CONFIG.grokModel,
+              description: 'Default Grok model'
+            }
+          ]
+        });
+        hfSync.updatedKeys = hfSync.results.filter((item) => item.ok).map((item) => item.key);
+        hfSync.ok = hfSync.results.every((item) => item.ok);
+      }
+    }
+
     logEvent('info', 'config', 'Runtime config saved', {
       searchEndpoint: Boolean(config.searchEndpoint),
       search2api: Boolean(config.searchShChatEndpoint),
@@ -2660,9 +2694,19 @@ export function createApp(userConfig = {}) {
         grok: Boolean(config.grokApiUrl || config.grokApiKey),
         tavily: Boolean(config.tavilyApiUrl || config.tavilyApiKey || config.tavilyMcpUrl || config.tavilyMcpToken),
         firecrawl: Boolean(config.firecrawlApiUrl || config.firecrawlApiKey)
+      },
+      hfSync: {
+        requested: hfSync.requested,
+        ok: hfSync.ok,
+        updatedKeys: hfSync.updatedKeys,
+        error: hfSync.error,
+        failedKeys: hfSync.results.filter((item) => !item.ok).map((item) => item.key)
       }
     });
-    res.json(publicConfig());
+    res.json({
+      ...publicConfig(),
+      hfSync
+    });
   }));
 
   app.get('/api/admin/hf-secrets', auth.requireAdmin, asyncHandler(async (_req, res) => {

@@ -58,6 +58,8 @@ const fields = {
   grokModel: $('#grokModel'),
   grokModelList: $('#grokModelList'),
   grokModelHint: $('#grokModelHint'),
+  syncGrokHfSecrets: $('#syncGrokHfSecrets'),
+  grokHfToken: $('#grokHfToken'),
   grokSystemPrompt: $('#grokSystemPrompt'),
   resetGrokPrompt: $('#resetGrokPrompt'),
   tavilyEnabled: $('#tavilyEnabled'),
@@ -514,6 +516,8 @@ async function saveConfig() {
     grokApiKey: fields.grokApiKey.value,
     clearGrokApiKey: fields.clearGrokApiKey.checked,
     grokModel: fields.grokModel.value.trim() || 'grok-4.20-beta',
+    syncGrokHfSecrets: fields.syncGrokHfSecrets?.checked ?? false,
+    grokHfToken: fields.grokHfToken?.value.trim() || undefined,
     grokSystemPrompt: fields.grokSystemPrompt.value.trim() || defaultGrokSystemPrompt,
     tavilyEnabled: fields.tavilyEnabled.checked,
     tavilyProvider: getTavilyProvider(),
@@ -550,9 +554,29 @@ async function saveConfig() {
   renderKeyStatus(config.keyStatus || []);
   fields.searchShApiKey.value = '';
   fields.clearSearchShApiKey.checked = false;
+  if (fields.grokHfToken) fields.grokHfToken.value = '';
   resetFusionSecrets();
-  fields.saveHint.textContent = '已保存';
-  setStatus('已保存', 'ok');
+  if (config.hfSync?.requested) {
+    const synced = config.hfSync.ok && config.hfSync.updatedKeys?.includes('GROK_MODEL');
+    fields.saveHint.textContent = synced
+      ? '已保存，GROK_MODEL 已同步到 HF Secrets'
+      : `已保存，但 HF Secrets 未同步：${config.hfSync.error?.message || '请检查 HF_WRITE_TOKEN'}`;
+    renderOutput({
+      ok: true,
+      grokModel: config.fusion?.grokModel,
+      hfSync: {
+        requested: config.hfSync.requested,
+        ok: config.hfSync.ok,
+        updatedKeys: config.hfSync.updatedKeys,
+        failedKeys: (config.hfSync.results || []).filter((item) => !item.ok).map((item) => item.key),
+        error: config.hfSync.error
+      }
+    });
+    setStatus(synced ? 'HF 已同步' : 'HF 未同步', synced ? 'ok' : 'fail');
+  } else {
+    fields.saveHint.textContent = '已保存';
+    setStatus('已保存', 'ok');
+  }
 }
 
 async function loadKeyStatus() {
