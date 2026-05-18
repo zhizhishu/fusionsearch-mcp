@@ -508,6 +508,92 @@ h1 {
   max-width: 100%;
 }
 
+.model-picker {
+  min-width: 0;
+  margin-top: 15px;
+  padding: 14px;
+  border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+  border-radius: 18px;
+  background: color-mix(in oklch, var(--muted) 26%, var(--card));
+}
+
+.model-picker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 11px;
+}
+
+.model-picker-head span {
+  color: color-mix(in oklch, var(--foreground) 86%, black);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.model-picker-head small {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.model-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.model-card {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 12px 13px;
+  border: 1px solid color-mix(in oklch, var(--border) 88%, transparent);
+  border-radius: 16px;
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--card) 72%, white);
+  text-align: left;
+  box-shadow: var(--shadow-soft);
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.model-card:hover,
+.model-card.active {
+  border-color: color-mix(in oklch, var(--primary) 42%, var(--border));
+  background: color-mix(in oklch, var(--primary) 7%, var(--card));
+  box-shadow: 0 10px 24px hsl(40 20% 20% / 0.06);
+}
+
+.model-card:active {
+  transform: scale(0.98);
+}
+
+.model-card strong,
+.model-card small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.model-card strong {
+  color: color-mix(in oklch, var(--foreground) 90%, black);
+  font: 12px/1.45 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.model-card small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.model-card.active small {
+  color: var(--primary);
+  font-weight: 700;
+}
+
 .hf-secret-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1085,10 +1171,19 @@ textarea:focus {
   .hf-secret-grid,
   .key-status-grid,
   .provider-switch,
+  .model-picker-head,
   .monitor-head,
   .monitor-row,
   .test-row {
     grid-template-columns: 1fr;
+  }
+
+  .model-picker-head {
+    display: grid;
+  }
+
+  .model-picker-head small {
+    text-align: left;
   }
 
   .kv-list div {

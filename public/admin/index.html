@@ -242,11 +242,24 @@
               <label class="field">
                 <span>默认模型</span>
                 <input id="grokModel" type="text" autocomplete="off" />
+                <small>可手填模型 ID，也可以读取模型列表后点选。</small>
               </label>
+              <div class="model-picker span-2" aria-label="Grok 模型选择">
+                <div class="model-picker-head">
+                  <span>模型选择</span>
+                  <small id="grokModelHint">读取模型后，通过边框卡片选择当前默认模型。</small>
+                </div>
+                <div class="model-card-grid" id="grokModelList">
+                  <button class="model-card active" type="button" data-model-id="grok-4.20-beta">
+                    <strong>grok-4.20-beta</strong>
+                    <small>当前默认</small>
+                  </button>
+                </div>
+              </div>
               <div class="test-row">
                 <button class="soft-button" id="listGrokModels">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-                  模型
+                  读取模型
                 </button>
                 <button class="primary-button" id="testGrok">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>

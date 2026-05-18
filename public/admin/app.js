@@ -56,6 +56,8 @@ const fields = {
   grokApiKey: $('#grokApiKey'),
   clearGrokApiKey: $('#clearGrokApiKey'),
   grokModel: $('#grokModel'),
+  grokModelList: $('#grokModelList'),
+  grokModelHint: $('#grokModelHint'),
   grokSystemPrompt: $('#grokSystemPrompt'),
   resetGrokPrompt: $('#resetGrokPrompt'),
   tavilyEnabled: $('#tavilyEnabled'),
@@ -135,6 +137,7 @@ const fields = {
 };
 
 let hfSecretOptions = [];
+let grokModelOptions = [];
 
 function setStatus(text, kind = '') {
   fields.runtimeStatus.textContent = text;
@@ -176,6 +179,49 @@ function setTavilyProvider(value = 'rest') {
   fields.tavilyProviderPanels.forEach((panel) => {
     panel.hidden = panel.dataset.tavilyProviderPanel !== provider;
   });
+}
+
+function normalizeModelList(models = []) {
+  return Array.from(new Set(
+    models
+      .map((model) => String(model || '').trim())
+      .filter(Boolean)
+  ));
+}
+
+function getCurrentGrokModel() {
+  return fields.grokModel?.value.trim() || 'grok-4.20-beta';
+}
+
+function renderGrokModels(models = grokModelOptions, { source = '' } = {}) {
+  if (!fields.grokModelList) return;
+  const currentModel = getCurrentGrokModel();
+  const normalized = normalizeModelList([currentModel, ...models]);
+  grokModelOptions = normalized;
+
+  fields.grokModelList.innerHTML = normalized
+    .map((model) => {
+      const active = model === currentModel;
+      return `
+        <button class="model-card ${active ? 'active' : ''}" type="button" data-model-id="${escapeHtml(model)}" aria-pressed="${String(active)}">
+          <strong>${escapeHtml(model)}</strong>
+          <small>${active ? '当前默认' : '点击选择'}</small>
+        </button>
+      `;
+    })
+    .join('');
+
+  if (fields.grokModelHint) {
+    const countText = normalized.length > 1 ? `${normalized.length} 个模型可选` : '当前模型可编辑';
+    fields.grokModelHint.textContent = source ? `${source} · ${countText}` : countText;
+  }
+}
+
+function selectGrokModel(model) {
+  if (!model || !fields.grokModel) return;
+  fields.grokModel.value = model;
+  renderGrokModels(grokModelOptions, { source: '已选择' });
+  fields.saveHint.textContent = '模型已选择，保存后生效';
 }
 
 function renderHfSecretFields(options = []) {
@@ -441,6 +487,7 @@ async function loadConfig() {
   }
   fields.grokApiUrl.value = config.fusion?.grokApiUrl || '';
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
+  renderGrokModels([fields.grokModel.value], { source: '当前配置' });
   fields.grokSystemPrompt.value = config.fusion?.grokSystemPrompt || defaultGrokSystemPrompt;
   fields.tavilyEnabled.checked = config.fusion?.tavilyEnabled !== false;
   setTavilyProvider(config.fusion?.tavilyProvider || 'rest');
@@ -855,8 +902,19 @@ async function testFirecrawlFetch() {
 async function listGrokModels() {
   renderOutput('读取 Grok 模型中...');
   const payload = await requestJson('/api/admin/fusion/models');
-  renderOutput(payload.ok ? payload.models : payload.error);
-  setStatus(payload.ok ? '模型已读取' : '模型异常', payload.ok ? 'ok' : 'fail');
+  if (payload.ok) {
+    const models = normalizeModelList(payload.models || []);
+    renderGrokModels(models, { source: '接口已读取' });
+    renderOutput({
+      currentModel: getCurrentGrokModel(),
+      modelCount: models.length,
+      models
+    });
+  } else {
+    renderGrokModels(grokModelOptions, { source: '读取失败' });
+    renderOutput(payload.error);
+  }
+  setStatus(payload.ok ? '模型可选择' : '模型异常', payload.ok ? 'ok' : 'fail');
 }
 
 function resetFusionSecrets() {
@@ -919,6 +977,16 @@ bindAction('#testFirecrawlFetch', testFirecrawlFetch);
 bindAction('#resetGrokPrompt', async () => {
   fields.grokSystemPrompt.value = defaultGrokSystemPrompt;
   fields.saveHint.textContent = '提示词已恢复，保存后生效';
+});
+
+fields.grokModel?.addEventListener('input', () => {
+  renderGrokModels(grokModelOptions, { source: '手动输入' });
+});
+
+fields.grokModelList?.addEventListener('click', (event) => {
+  const card = event.target.closest('.model-card[data-model-id]');
+  if (!card) return;
+  selectGrokModel(card.dataset.modelId);
 });
 
 fields.tavilyProviderChoices.forEach((choice) => {
