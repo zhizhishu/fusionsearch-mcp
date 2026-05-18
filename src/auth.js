@@ -86,7 +86,7 @@ function extractMcpToken(req) {
   if (authorization.toLowerCase().startsWith('bearer ')) {
     return authorization.slice(7).trim();
   }
-  return req.headers['x-mcp-token'] || req.query?.token || '';
+  return req.headers['x-mcp-token'] || req.params?.mcpPathToken || req.query?.token || '';
 }
 
 export function createAuth({

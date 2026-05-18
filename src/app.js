@@ -3349,7 +3349,7 @@ export function createApp(userConfig = {}) {
           `This endpoint exposes the "${profile}" FusionSearch MCP profile. ` +
           'Use /mcp as the primary unified FusionSearch MCP entry. It combines five provider layers: LibreSearch, Search-2api, Grok/OpenAI-compatible, Tavily, and Firecrawl. ' +
           'Preferred smart tools are "smart_research", "smart_fetch", and "fusion_status"; provider tools are "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
-          'POST initialize/call requests to / or /mcp (Streamable HTTP). Legacy SSE clients connect to /sse (or /mcp/sse) and POST to /messages (or /mcp/messages) with the provided sessionId.'
+          'POST initialize/call requests to / or /mcp (Streamable HTTP). If headers are inconvenient, /mcp/ApiKey=<token> is supported as a convenience shortcut. Legacy SSE clients connect to /sse (or /mcp/sse) and POST to /messages (or /mcp/messages) with the provided sessionId.'
       }
     );
 
@@ -3364,6 +3364,12 @@ export function createApp(userConfig = {}) {
     { path: '/libresearch/mcp', profile: 'libresearch' },
     { path: '/fusion/mcp', profile: 'fusion' }
   ];
+  const tokenizedStreamableRoutes = streamableRoutes
+    .filter(({ path }) => path !== '/')
+    .map(({ path, profile }) => ({
+      path: `${path}/ApiKey=:mcpPathToken`,
+      profile
+    }));
 
   const streamablePostHandler = (profile) => async (req, res) => {
     const sessionId = req.headers['mcp-session-id'];
@@ -3426,7 +3432,7 @@ export function createApp(userConfig = {}) {
     }
   };
 
-  streamableRoutes.forEach(({ path, profile }) => {
+  [...streamableRoutes, ...tokenizedStreamableRoutes].forEach(({ path, profile }) => {
     app.post(path, auth.requireMcp, streamablePostHandler(profile));
   });
 
@@ -3449,7 +3455,7 @@ export function createApp(userConfig = {}) {
     }
   };
 
-  streamableRoutes.forEach(({ path }) => {
+  [...streamableRoutes, ...tokenizedStreamableRoutes].forEach(({ path }) => {
     if (path === '/') {
       app.get(path, (req, res, next) => {
         if (envEnabled('ENABLE_GATEWAY_PROXY')) {
@@ -3475,11 +3481,29 @@ export function createApp(userConfig = {}) {
     { path: '/libresearch/mcp/sse', eventPath: '/libresearch/mcp/messages', profile: 'libresearch' },
     { path: '/fusion/mcp/sse', eventPath: '/fusion/mcp/messages', profile: 'fusion' }
   ];
+  const tokenizedSseRoutes = [
+    {
+      path: '/mcp/ApiKey=:mcpPathToken/sse',
+      eventPath: (req) => `/mcp/ApiKey=${encodeURIComponent(req.params.mcpPathToken)}/messages`,
+      profile: 'full'
+    },
+    {
+      path: '/libresearch/mcp/ApiKey=:mcpPathToken/sse',
+      eventPath: (req) => `/libresearch/mcp/ApiKey=${encodeURIComponent(req.params.mcpPathToken)}/messages`,
+      profile: 'libresearch'
+    },
+    {
+      path: '/fusion/mcp/ApiKey=:mcpPathToken/sse',
+      eventPath: (req) => `/fusion/mcp/ApiKey=${encodeURIComponent(req.params.mcpPathToken)}/messages`,
+      profile: 'fusion'
+    }
+  ];
 
   const createSseHandler = (eventPath, profile) => async (req, res) => {
     try {
       const server = createServerInstance(profile);
-      const transport = new SSEServerTransport(eventPath, res);
+      const resolvedEventPath = typeof eventPath === 'function' ? eventPath(req) : eventPath;
+      const transport = new SSEServerTransport(resolvedEventPath, res);
 
       sseSessions.set(transport.sessionId, { transport, server });
 
@@ -3510,11 +3534,16 @@ export function createApp(userConfig = {}) {
     }
   };
 
-  sseRoutes.forEach(({ path, eventPath, profile }) => {
+  [...sseRoutes, ...tokenizedSseRoutes].forEach(({ path, eventPath, profile }) => {
     app.get(path, auth.requireMcp, createSseHandler(eventPath, profile));
   });
 
   const sseMessagePaths = ['/mcp/messages', '/messages', '/libresearch/mcp/messages', '/fusion/mcp/messages'];
+  const tokenizedSseMessagePaths = [
+    '/mcp/ApiKey=:mcpPathToken/messages',
+    '/libresearch/mcp/ApiKey=:mcpPathToken/messages',
+    '/fusion/mcp/ApiKey=:mcpPathToken/messages'
+  ];
 
   const handleSseMessage = async (req, res) => {
     const sessionId = (req.query.sessionId ?? req.headers['mcp-session-id'])?.toString();
@@ -3539,7 +3568,7 @@ export function createApp(userConfig = {}) {
     }
   };
 
-  sseMessagePaths.forEach((path) => {
+  [...sseMessagePaths, ...tokenizedSseMessagePaths].forEach((path) => {
     app.post(path, auth.requireMcp, handleSseMessage);
   });
 
@@ -3612,8 +3641,10 @@ export function createApp(userConfig = {}) {
       mcpEndpoint: '/mcp',
       mcpEndpoints: {
         full: '/mcp',
+        fullApiKeyShortcut: '/mcp/ApiKey=<MCP_AUTH_TOKEN>',
         libresearch: '/libresearch/mcp',
-        fusion: '/fusion/mcp'
+        fusion: '/fusion/mcp',
+        sseApiKeyShortcut: '/mcp/ApiKey=<MCP_AUTH_TOKEN>/sse'
       },
       mcpAuthEnabled: auth.mcpAuthEnabled,
       adminAuthEnabled: auth.adminAuthEnabled,
