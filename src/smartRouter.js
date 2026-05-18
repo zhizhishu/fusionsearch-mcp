@@ -5,6 +5,12 @@ import {
   executeTavilyExtractOnly,
   executeTavilySearchOnly
 } from './fusionClients.js';
+import {
+  buildEvidencePipeline,
+  buildFetchSynthesisPrompt,
+  buildResearchSynthesisPrompt,
+  formatEvidencePipeline
+} from './fusionOrchestrator.js';
 import { mergeSources } from './sourceCache.js';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -94,12 +100,19 @@ export async function executeSmartFetch({
   }
 
   let answer = '';
+  const pipeline = buildEvidencePipeline({
+    query: question || targetUrl,
+    sources: [{ provider, title: targetUrl, url: targetUrl, content, fetched: true }],
+    fetched: [{ provider, title: targetUrl, url: targetUrl, content, fetched: true }],
+    attempts,
+    limit: 5
+  });
   if (summarize || question.trim()) {
     const startedAt = Date.now();
     try {
       const result = await executeGrokWebSearch({
         config,
-        query: buildUrlSummaryPrompt({ url: targetUrl, question, content }),
+        query: buildFetchSynthesisPrompt({ url: targetUrl, question, content, attempts }),
         extraSources: 0,
         timeoutMs
       });
@@ -133,6 +146,7 @@ export async function executeSmartFetch({
     provider,
     attempts,
     providers: providerMap(attempts),
+    pipeline,
     answer,
     content,
     preview: content.slice(0, 2000)
@@ -169,6 +183,7 @@ export async function executeSmartResearch({
   const query = resolveQuery(normalizedInput);
   const attempts = [];
   const evidence = [];
+  const evidenceBlocks = [];
   const sourceGroups = [];
 
   const run = async (providerId, label, fn) => {
@@ -222,24 +237,36 @@ export async function executeSmartResearch({
   ]);
 
   if (libre.ok) {
-    evidence.push(buildSummaryLines({ query, params: libre.value.params, payload: libre.value.payload }).join('\n'));
+    const content = buildSummaryLines({ query, params: libre.value.params, payload: libre.value.payload }).join('\n');
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'libresearch', title: 'LibreSearch structured results', content });
     sourceGroups.push(getLibreResultItems(libre.value.payload, limit).map((item) => ({ ...item, provider: 'libresearch' })));
   } else {
-    evidence.push(`## LibreSearch\n失败: ${libre.error}`);
+    const content = `## LibreSearch\n失败: ${libre.error}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'libresearch', title: 'LibreSearch error', content });
   }
 
   if (search2api.ok) {
-    evidence.push(`## Search-2api\n模型: ${search2api.value.model}\n模式: ${search2api.value.mode}\n\n${search2api.value.content}`);
+    const content = `## Search-2api\n模型: ${search2api.value.model}\n模式: ${search2api.value.mode}\n\n${search2api.value.content}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'search2api', title: 'Search-2api answer', content });
   } else {
-    evidence.push(`## Search-2api\n失败: ${search2api.error}`);
+    const content = `## Search-2api\n失败: ${search2api.error}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'search2api', title: 'Search-2api error', content });
   }
 
   if (tavily.ok) {
     const results = tavily.value.results || [];
-    evidence.push(formatSourceEvidence('Tavily', results, limit));
+    const content = formatSourceEvidence('Tavily', results, limit);
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'tavily', title: 'Tavily search results', content });
     sourceGroups.push(results);
   } else {
-    evidence.push(`## Tavily\n失败: ${tavily.error}`);
+    const content = `## Tavily\n失败: ${tavily.error}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'tavily', title: 'Tavily error', content });
   }
 
   const sources = mergeSources(...sourceGroups).slice(0, Math.max(limit, 1) * 2);
@@ -258,22 +285,33 @@ export async function executeSmartResearch({
         url: source.url,
         ok: fetchedResult.ok,
         provider: fetchedResult.provider,
-        preview: fetchedResult.preview || fetchedResult.error
+        preview: fetchedResult.preview || fetchedResult.error,
+        content: fetchedResult.content || ''
       });
       if (fetchedResult.ok) {
-        evidence.push(`## 抓取正文: ${source.title || source.url}\nURL: ${source.url}\nProvider: ${fetchedResult.provider}\n\n${fetchedResult.content.slice(0, 3000)}`);
+        const content = `## 抓取正文: ${source.title || source.url}\nURL: ${source.url}\nProvider: ${fetchedResult.provider}\n\n${fetchedResult.content.slice(0, 3000)}`;
+        evidence.push(content);
+        evidenceBlocks.push({ provider: fetchedResult.provider || 'fetch', title: source.title || source.url, url: source.url, content });
       }
     }
   }
 
   const anyEvidence = attempts.some((item) => item.status === 'up');
+  const pipeline = buildEvidencePipeline({
+    query,
+    sources,
+    evidenceBlocks,
+    fetched,
+    attempts,
+    limit: Math.max(limit, 1) * 2
+  });
   let answer = '';
   if (summarize && anyEvidence) {
     const startedAt = Date.now();
     try {
       const result = await executeGrokWebSearch({
         config,
-        query: buildResearchPrompt({ query, evidence }),
+        query: buildResearchSynthesisPrompt(pipeline),
         extraSources: 0,
         timeoutMs
       });
@@ -315,9 +353,10 @@ export async function executeSmartResearch({
     query,
     attempts,
     providers: providerMap(attempts),
+    pipeline,
     answer,
     evidence,
-    sources: mergeSources(...sourceGroups).slice(0, 20),
+    sources: mergeSources(...sourceGroups, pipeline.items).slice(0, 20),
     fetched
   };
 }
@@ -334,6 +373,9 @@ export function formatSmartFetchResult(result) {
   ];
   if (result.answer) {
     lines.push('', '## 总结', result.answer);
+  }
+  if (result.pipeline) {
+    lines.push('', formatEvidencePipeline(result.pipeline));
   }
   if (result.content) {
     lines.push('', '## 内容', result.content);
@@ -358,6 +400,9 @@ export function formatSmartResearchResult(result) {
     lines.push('', '## 汇总答案', result.answer);
   } else if (result.mode === 'keyword') {
     lines.push('', '## 汇总答案', 'Grok 未返回汇总，以下为已取得证据。');
+  }
+  if (result.pipeline) {
+    lines.push('', formatEvidencePipeline(result.pipeline));
   }
   if (result.evidence?.length) {
     lines.push('', '## 证据', result.evidence.join('\n\n---\n\n'));

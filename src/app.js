@@ -1923,7 +1923,7 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
       'smart_fetch',
       {
         title: 'Smart Fetch',
-        description: '智能网页抓取：Tavily Extract -> Firecrawl Scrape -> HTML fetch，必要时再让 Grok 总结',
+        description: 'Fusion Orchestrator 网页证据管线：Tavily Extract -> Firecrawl Scrape -> HTML fetch，归一化正文证据并可让 Grok 总结',
         inputSchema: smartFetchShape
       },
       async (input) => {
@@ -1970,7 +1970,7 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
       'smart_research',
       {
         title: 'Smart Research',
-        description: '智能研究入口：URL 自动抓取，关键词自动并用 LibreSearch、Search-2api、Tavily，再由 Grok 汇总',
+        description: 'Fusion Orchestrator 研究入口：自动识别 URL/问题，多源检索、证据归一、去重排序、交叉验证，再由 Grok 合成答案',
         inputSchema: smartResearchShape
       },
       async (input) => {
@@ -3392,7 +3392,7 @@ export function createApp(userConfig = {}) {
         instructions:
           `This endpoint exposes the "${profile}" FusionSearch MCP profile. ` +
           'Use /mcp as the primary unified FusionSearch MCP entry. It combines five provider layers: LibreSearch, Search-2api, Grok/OpenAI-compatible, Tavily, and Firecrawl. ' +
-          'Preferred smart tools are "smart_research", "smart_fetch", and "fusion_status"; provider tools are "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
+          'Preferred smart tools are "smart_research", "smart_fetch", and "fusion_status"; smart tools run the Fusion Orchestrator evidence pipeline with intent routing, evidence normalization, dedup/ranking, cross-checking, and synthesis. Provider tools are "web_search", "web_fetch", "web_map", "libre_search", "search2api_chat", and "fusion_research". Legacy fusionsearch_* and libresearch_* tools remain available for compatibility. ' +
           'POST initialize/call requests to / or /mcp (Streamable HTTP). If headers are inconvenient, /mcp/ApiKey=<token> is supported as a convenience shortcut. Legacy SSE clients connect to /sse (or /mcp/sse) and POST to /messages (or /mcp/messages) with the provided sessionId.'
       }
     );
