@@ -1,11 +1,5 @@
 # Third Party Notices
 
-## GuDaStudio/GrokSearch
-
-- Source: https://github.com/GuDaStudio/GrokSearch/tree/grok-with-tavily
-- License: MIT
-- Usage: FusionSearch MCP references the GrokSearch tool design and provider flow, then reimplements the Grok/Tavily/Firecrawl integration as native Node.js MCP tools in this project.
-
 ## lza6/Search-2api
 
 - Source: https://github.com/lza6/Search-2api

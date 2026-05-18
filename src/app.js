@@ -14,7 +14,7 @@ import {
   DEFAULT_GROK_SYSTEM_PROMPT,
   buildFusionConfigInfo,
   executeFirecrawlFetch,
-  executeGrokSearch,
+  executeGrokWebSearch,
   executeTavilyExtractOnly,
   executeTavilyFetch,
   executeTavilyMap,
@@ -1678,7 +1678,7 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
         const parsed = await webSearchSchema.parseAsync(input);
         const sessionId = newSessionId();
         try {
-          const result = await executeGrokSearch({
+          const result = await executeGrokWebSearch({
             config,
             query: parsed.query,
             platform: parsed.platform,
@@ -1852,7 +1852,7 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
 
         const sessionId = newSessionId();
         try {
-          const result = await executeGrokSearch({
+          const result = await executeGrokWebSearch({
             config,
             query: prompt,
             model: parsed.model,
@@ -2060,7 +2060,7 @@ function createFusionSearchTools(server, config, sourceCache, persistConfig) {
       const parsed = await grokSearchSchema.parseAsync(input);
       const sessionId = newSessionId();
       try {
-        const result = await executeGrokSearch({
+        const result = await executeGrokWebSearch({
           config,
           query: parsed.query,
           platform: parsed.platform,
@@ -3054,7 +3054,7 @@ export function createApp(userConfig = {}) {
     const input = await adminGrokTestSchema.parseAsync(req.body ?? {});
     const startedAt = Date.now();
     try {
-      const result = await executeGrokSearch({
+      const result = await executeGrokWebSearch({
         config,
         query: input.query,
         platform: input.platform,

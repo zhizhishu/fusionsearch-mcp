@@ -82,7 +82,7 @@ export function getFusionPublicConfig(config = {}) {
   };
 }
 
-export async function executeGrokSearch({
+export async function executeGrokWebSearch({
   config,
   query,
   platform = '',

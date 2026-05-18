@@ -1,7 +1,7 @@
 import { buildSummaryLines, executeSearch, resolveQuery } from './searchClient.js';
 import {
   executeFirecrawlFetch,
-  executeGrokSearch,
+  executeGrokWebSearch,
   executeTavilyExtractOnly,
   executeTavilySearchOnly
 } from './fusionClients.js';
@@ -97,7 +97,7 @@ export async function executeSmartFetch({
   if (summarize || question.trim()) {
     const startedAt = Date.now();
     try {
-      const result = await executeGrokSearch({
+      const result = await executeGrokWebSearch({
         config,
         query: buildUrlSummaryPrompt({ url: targetUrl, question, content }),
         extraSources: 0,
@@ -271,7 +271,7 @@ export async function executeSmartResearch({
   if (summarize && anyEvidence) {
     const startedAt = Date.now();
     try {
-      const result = await executeGrokSearch({
+      const result = await executeGrokWebSearch({
         config,
         query: buildResearchPrompt({ query, evidence }),
         extraSources: 0,
