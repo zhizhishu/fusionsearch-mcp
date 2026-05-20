@@ -21,6 +21,11 @@
   box-sizing: border-box;
 }
 
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 [hidden] {
   display: none !important;
 }
@@ -39,6 +44,15 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
   overflow-x: hidden;
+}
+
+:where(.app-shell, .page-head, .brand, .head-actions, .workbench, .content-shell, .panel-stage, .panel, .login-panel, .sub-rail, .side-rail, .field, .check-row, .field-grid, .provider-switch, .provider-option, .provider-panel, .model-picker, .model-card-grid, .model-card, .hf-secret-grid, .key-status-grid, .key-status-card, .monitor-head, .monitor-table, .monitor-row, .log-toolbar, .log-viewer, .log-entry, .kv-list, .test-row, .output, .save-bar) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(.panel, .login-panel, .save-bar, .empty-note, .key-status-card, .monitor-row, .log-entry, .output) {
+  overflow-wrap: anywhere;
 }
 
 button,
@@ -85,6 +99,7 @@ p {
   justify-content: space-between;
   gap: 24px;
   margin: 0 0 24px 172px;
+  min-width: 0;
 }
 
 .brand {
@@ -92,6 +107,10 @@ p {
   align-items: center;
   min-width: 0;
   gap: 14px;
+}
+
+.brand > div {
+  min-width: 0;
 }
 
 .brand-mark {
@@ -126,6 +145,9 @@ h1 {
 .head-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  min-width: 0;
   gap: 10px;
 }
 
@@ -136,6 +158,7 @@ h1 {
 
 .status-pill {
   min-width: 82px;
+  max-width: 100%;
   height: 34px;
   display: inline-flex;
   align-items: center;
@@ -147,6 +170,8 @@ h1 {
   box-shadow: var(--shadow-soft);
   font-size: 13px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .status-pill.ok {
@@ -728,7 +753,7 @@ h1 {
 .monitor-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(130px, 1.1fr) minmax(110px, 0.8fr) minmax(92px, auto) minmax(150px, 1fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(72px, auto) minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   padding: 12px 13px;
@@ -766,6 +791,7 @@ h1 {
 
 .monitor-row p {
   grid-column: 1 / -1;
+  min-width: 0;
   color: var(--muted-foreground);
   font-size: 12px;
   line-height: 1.5;
@@ -783,7 +809,7 @@ h1 {
 
 .log-toolbar {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 120px auto;
+  grid-template-columns: minmax(112px, 150px) minmax(0, 1fr) minmax(88px, 120px) minmax(96px, auto);
   gap: 12px;
   align-items: end;
   margin-top: 16px;
@@ -904,10 +930,17 @@ textarea:focus {
   border: 1px solid transparent;
   border-radius: 14px;
   padding: 0 15px;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
   font-size: 13px;
   font-weight: 620;
   transition: background 160ms ease, color 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.primary-button svg,
+.soft-button svg {
+  flex: 0 0 auto;
 }
 
 .primary-button {
@@ -949,6 +982,7 @@ textarea:focus {
   background: var(--muted);
   font: 12px/1.65 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .log-viewer {
@@ -961,6 +995,7 @@ textarea:focus {
 }
 
 .log-entry {
+  min-width: 0;
   border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
   border-radius: 18px;
   background: color-mix(in oklch, var(--muted) 34%, var(--card));
@@ -977,9 +1012,10 @@ textarea:focus {
 
 .log-entry-head {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: minmax(52px, auto) minmax(0, 0.8fr) minmax(0, 1fr);
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
 
 .log-entry-head span {
@@ -1002,12 +1038,17 @@ textarea:focus {
 }
 
 .log-entry-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: color-mix(in oklch, var(--foreground) 88%, black);
   font-size: 12px;
 }
 
 .log-entry-head time {
   justify-self: end;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
   color: var(--muted-foreground);
   font-size: 11px;
 }
@@ -1028,6 +1069,7 @@ textarea:focus {
   background: color-mix(in oklch, var(--muted) 68%, white);
   font: 11px/1.55 "Cascadia Code", "SFMono-Regular", Consolas, monospace;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .save-bar {
@@ -1044,6 +1086,10 @@ textarea:focus {
   box-shadow: var(--shadow);
 }
 
+.save-bar > div {
+  min-width: 0;
+}
+
 .save-bar strong {
   display: block;
   color: color-mix(in oklch, var(--foreground) 90%, black);
@@ -1054,6 +1100,37 @@ textarea:focus {
 .save-bar span {
   color: var(--muted-foreground);
   font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .content-shell {
+    grid-template-columns: 172px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .monitor-head,
+  .monitor-row,
+  .log-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .monitor-row-head {
+    display: none;
+  }
+
+  .service-pill {
+    justify-self: start;
+  }
+
+  .log-entry-head {
+    grid-template-columns: minmax(52px, auto) minmax(0, 1fr);
+  }
+
+  .log-entry-head time {
+    grid-column: 1 / -1;
+    justify-self: start;
+    text-align: left;
+  }
 }
 
 @keyframes rise {
@@ -1110,6 +1187,13 @@ textarea:focus {
     margin-left: 0;
     align-items: flex-start;
     flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .head-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .workbench,
@@ -1124,8 +1208,10 @@ textarea:focus {
     display: flex;
     gap: 8px;
     overflow-x: auto;
+    overflow-y: hidden;
     overscroll-behavior-x: contain;
     padding: 10px;
+    scroll-snap-type: x proximity;
   }
 
   .log-toolbar {
@@ -1141,6 +1227,7 @@ textarea:focus {
   .rail-item,
   .subnav-item {
     flex: 0 0 auto;
+    scroll-snap-align: start;
   }
 
   .rail-title {
@@ -1155,11 +1242,13 @@ textarea:focus {
   .subnav-group.active {
     display: flex;
     gap: 8px;
+    min-width: max-content;
   }
 
   .subnav-item {
     width: auto;
-    min-width: max-content;
+    max-width: min(64vw, 220px);
+    min-width: 0;
   }
 
   .panel {
@@ -1196,5 +1285,59 @@ textarea:focus {
     margin: 0 auto 28px;
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    width: calc(100vw - 16px);
+    margin-top: 12px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+  }
+
+  .panel,
+  .login-panel {
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .panel-title {
+    align-items: flex-start;
+  }
+
+  .panel-note {
+    margin-left: 0;
+  }
+
+  .model-picker,
+  .empty-note,
+  .monitor-head,
+  .monitor-row,
+  .log-entry,
+  .output {
+    border-radius: 16px;
+  }
+
+  .model-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .test-row .primary-button,
+  .test-row .soft-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .save-bar {
+    width: calc(100vw - 16px);
+    border-radius: 20px;
   }
 }
