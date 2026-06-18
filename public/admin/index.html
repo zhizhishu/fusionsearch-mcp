@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FusionSearch 设置</title>
     <link rel="icon" href="/admin/assets/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" />
     <link rel="stylesheet" href="/admin/assets/style.css" />
   </head>
   <body>
@@ -38,13 +41,13 @@
           <h2>管理登录</h2>
         </div>
         <div class="test-row">
-          <input id="adminTokenInput" type="password" autocomplete="current-password" placeholder="Admin Token" />
+          <input id="adminTokenInput" type="password" autocomplete="current-password" placeholder="管理口令" />
           <button class="primary-button" id="loginAdmin">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M21 3v18" /></svg>
             登录
           </button>
         </div>
-        <p class="field-note" id="loginHint">Public Space 建议开启 Admin Token。</p>
+        <p class="field-note" id="loginHint">公开访问的 Space，建议设一个管理口令，把闲人挡在门外。</p>
       </section>
 
       <div class="workbench">
@@ -62,7 +65,7 @@
           </a>
           <a class="rail-item" href="#fusion:keys" data-group="fusion">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.5 7l2.5 9M15.5 7 13 16M10 5h4" /></svg>
-            <span>All Key Control</span>
+            <span>密钥中心</span>
           </a>
           <a class="rail-item" href="#mcp:full" data-group="mcp">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg>
@@ -93,9 +96,9 @@
               <button class="subnav-item" type="button" data-subview="search2api">Search-2api</button>
             </div>
             <div class="subnav-group" data-subnav-group="fusion" hidden>
-              <button class="subnav-item active" type="button" data-subview="keys">Key Status</button>
+              <button class="subnav-item active" type="button" data-subview="keys">密钥状态</button>
               <button class="subnav-item" type="button" data-subview="grok">Grok API</button>
-              <button class="subnav-item" type="button" data-subview="prompt">System Prompt</button>
+              <button class="subnav-item" type="button" data-subview="prompt">系统提示词</button>
               <button class="subnav-item" type="button" data-subview="tavily">Tavily</button>
               <button class="subnav-item" type="button" data-subview="firecrawl">Firecrawl</button>
             </div>
@@ -121,7 +124,7 @@
               <button class="subnav-item" type="button" data-subview="firecrawl-test">Firecrawl</button>
             </div>
             <div class="subnav-group" data-subnav-group="status" hidden>
-              <button class="subnav-item active" type="button" data-subview="monitoring">Monitoring</button>
+              <button class="subnav-item active" type="button" data-subview="monitoring">健康看板</button>
               <button class="subnav-item" type="button" data-subview="runtime">运行状态</button>
               <button class="subnav-item" type="button" data-subview="logs">日志</button>
             </div>
@@ -208,7 +211,7 @@
             <section class="panel view-panel" data-group-panel="fusion" data-view-panel="keys" hidden>
               <div class="panel-title">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
-                <h2>All Key Control</h2>
+                <h2>密钥中心</h2>
               </div>
               <p class="panel-note">这里只显示是否已配置和脱敏值，不回显 Cookie、Token 或 API Key 明文。</p>
               <div class="key-status-grid" id="keyStatusGrid"></div>
@@ -216,7 +219,7 @@
                 <span class="inline-hint" id="keyStatusHint">保存配置或刷新后同步状态。</span>
                 <button class="soft-button" id="refreshKeyStatus" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
-                  刷新 Key 状态
+                  刷新密钥状态
                 </button>
               </div>
             </section>
@@ -280,7 +283,7 @@
             <section class="panel view-panel" data-group-panel="fusion" data-view-panel="prompt" hidden>
               <div class="panel-title">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h16" /></svg>
-                <h2>Grok System Prompt</h2>
+                <h2>Grok 系统提示词</h2>
               </div>
               <p class="panel-note">只注入给 Grok / OpenAI-compatible chat，用来控制证据标准、中文输出和引用规则。</p>
               <label class="field span-2">
@@ -593,13 +596,13 @@
             <section class="panel view-panel" data-group-panel="status" data-view-panel="monitoring" hidden>
               <div class="panel-title">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" /></svg>
-                <h2>Monitoring</h2>
+                <h2>健康看板</h2>
               </div>
               <p class="panel-note">参考 CheckCle 的状态列表形态，监控 LibreSearch、Search-2api、Grok、Tavily、Firecrawl。默认优先读取最近调用和日志状态，主动探针有冷却保护。</p>
               <div class="monitor-head">
                 <div>
                   <strong id="monitoringCount">5</strong>
-                  <span>Currently Monitoring</span>
+                  <span>正在守护的服务</span>
                 </div>
                 <div class="monitor-bars" id="monitorBars"></div>
               </div>
@@ -614,7 +617,7 @@
                 <span class="inline-hint">轻量探针不会频繁消耗额度；Tavily/Firecrawl 默认只确认配置和最近事件。</span>
                 <button class="primary-button" id="probeMonitoring" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4" /></svg>
-                  主动探针
+                  主动体检
                 </button>
               </div>
               <div class="monitor-table" id="monitoringServices"></div>
@@ -677,7 +680,7 @@
     <div class="save-bar">
       <div>
         <strong>运行配置</strong>
-        <span id="saveHint">未保存的修改会在重启前失效</span>
+        <span id="saveHint">改完记得点保存，不然 Space 一重启就白忙活啦</span>
       </div>
       <button class="primary-button" id="saveConfig">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
