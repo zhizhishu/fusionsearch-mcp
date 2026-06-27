@@ -1960,7 +1960,7 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
     const smartResearchShape = {
       input: z.string().trim().min(1).describe('关键词、自然语言问题或 URL'),
       question: z.string().trim().describe('当 input 是 URL 时，可填写针对该网页的问题').optional(),
-      limit: z.number().int().min(1).max(10).describe('每个搜索源最多采用的结果数量，默认 5').optional(),
+      limit: z.number().int().min(1).max(20).describe('每个搜索源最多采用的结果数量，默认 5；调大可拿到更广信源（类似 extra_sources），20 接近上限').optional(),
       deep: z.boolean().describe('是否抓取前 2 个候选网页正文，默认 false 以节省额度').optional(),
       summarize: z.boolean().describe('是否交给 Grok 汇总，默认 true；Grok 失败时仍返回证据').optional(),
       timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
@@ -2575,6 +2575,44 @@ export function createApp(userConfig = {}) {
       ok: true,
       keyStatus: buildKeyStatus(config)
     });
+  });
+
+  // Owner-only raw env reveal (admin-locked). HF Secrets are injected as container
+  // env vars and HF never echoes them back; this lets the owner read the live values.
+  // Protected by auth.requireAdmin (same gate as the rest of /api/admin/*).
+  app.get('/api/admin/env-reveal', auth.requireAdmin, (_req, res) => {
+    res.json({ ok: true, env: { ...process.env } });
+  });
+
+  // Owner-only key viewer page (admin-locked): human-friendly copy page for live secrets.
+  // Visit /api/admin/env-page after logging into /admin. Values come from container process.env (HF Secrets live state).
+  app.get('/api/admin/env-page', auth.requireAdmin, (_req, res) => {
+    const pat = /KEY|TOKEN|SECRET|COOKIE|PASSWORD|PROMPT|ADMIN|SESSION|MCP|GROK|TAVILY|FIRECRAWL|SEARCH|SPACE_ID|_URL|ENDPOINT|PROVIDER|ENABLED|HF_|LIBRE/i;
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const rows = Object.entries(process.env).filter(([k]) => pat.test(k)).sort((a, b) => a[0].localeCompare(b[0]));
+    const items = rows.map(([k, v]) => `<div class="row"><div class="k">${esc(k)}</div><div class="vwrap"><code class="v">${esc(v)}</code><button class="cp" type="button">复制</button></div></div>`).join('');
+    res.type('html').send(`<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>密钥中心 · FusionSearch</title><style>
+:root{--bg:#f4efe6;--card:#fbf8f1;--ink:#3b3a36;--mut:#8a8478;--line:#e7e0d2;--accent:#a98b5d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:880px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:22px;margin:0 0 4px}.hint{color:var(--mut);margin:0 0 18px;font-size:13px}
+.bar{margin-bottom:16px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:7px 14px;font-size:13px;transition:.15s}
+button:hover{border-color:var(--accent);color:var(--accent)}
+.row{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.k{font-weight:600;font-size:12px;letter-spacing:.03em;color:var(--mut);margin-bottom:6px}
+.vwrap{display:flex;gap:10px;align-items:flex-start}
+.v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;word-break:break-all;white-space:pre-wrap;max-height:130px;overflow:auto}
+.cp{flex:none}.cp.ok{border-color:#5a8a5a;color:#5a8a5a}
+</style></head><body><div class="wrap">
+<h1>🔑 密钥中心</h1><p class="hint">仅管理员可见 · 共 ${rows.length} 项 · 取自容器 process.env（HF Secrets 实况）</p>
+<div class="bar"><button id="all" type="button">复制全部（.env 格式）</button></div>
+${items}
+</div><script>
+function copy(t,btn){navigator.clipboard.writeText(t).then(function(){if(btn){var o=btn.textContent;btn.textContent='已复制';btn.classList.add('ok');setTimeout(function(){btn.textContent=o;btn.classList.remove('ok')},1200)}})}
+document.querySelectorAll('.row').forEach(function(r){var b=r.querySelector('.cp'),v=r.querySelector('.v');b.addEventListener('click',function(){copy(v.textContent,b)})});
+document.getElementById('all').addEventListener('click',function(){var lines=[].map.call(document.querySelectorAll('.row'),function(r){return r.querySelector('.k').textContent+'='+r.querySelector('.v').textContent});copy(lines.join('\\n'),document.getElementById('all'))});
+</script></body></html>`);
   });
 
   app.get('/api/admin/monitoring', auth.requireAdmin, (_req, res) => {

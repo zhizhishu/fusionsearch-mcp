@@ -409,7 +409,7 @@ export function formatSmartResearchResult(result) {
   }
   if (result.sources?.length) {
     lines.push('', '## 信源');
-    result.sources.slice(0, 10).forEach((source, index) => {
+    result.sources.slice(0, 20).forEach((source, index) => {
       lines.push(`- (${index + 1}) ${source.title || source.url}`);
       if (source.url) lines.push(`  URL: ${source.url}`);
       if (source.provider) lines.push(`  Provider: ${source.provider}`);

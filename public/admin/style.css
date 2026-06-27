@@ -1229,3 +1229,37 @@ input:focus, select:focus, textarea:focus {
   .test-row .primary-button, .test-row .soft-button { width: 100%; min-width: 0; }
   .save-bar { width: calc(100vw - 16px); }
 }
+
+/* ——————————————————————————————————————————————
+   触屏 / 移动端增强
+   —————————————————————————————————————————————— */
+@media (max-width: 900px) {
+  /* iOS 铁律：表单控件 ≥16px，聚焦时不再自动放大缩页 */
+  input, select, textarea { font-size: 16px; }
+
+  /* 更顺手的点按目标（手指够得着） */
+  .rail-item, .subnav-item { min-height: 46px; }
+  .primary-button, .soft-button, .head-button { min-height: 46px; }
+  .icon-button { width: 42px; height: 42px; }
+  .status-pill { height: 38px; }
+  .check-row input, .provider-option input { width: 20px; min-height: 20px; }
+
+  /* 去掉点按灰块、横向滚动带惯性 */
+  a, button, input, select, textarea,
+  .rail-item, .subnav-item { -webkit-tap-highlight-color: transparent; }
+  .side-rail, .sub-rail { -webkit-overflow-scrolling: touch; }
+
+  /* 贴底保存条避让底部安全区，不盖内容 */
+  .save-bar { bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (max-width: 520px) {
+  /* 小屏密度回收：标题、留白更克制 */
+  .panel-title > svg { width: 34px; height: 34px; padding: 6px; }
+  .panel-title h2 { font-size: 18px; }
+  .panel-note { font-size: 12px; }
+  .field, .check-row { margin-top: 15px; }
+  .kv-list div { padding-bottom: 10px; }
+  .save-bar { padding: 12px 14px; }
+  .save-bar .primary-button { width: 100%; }
+}

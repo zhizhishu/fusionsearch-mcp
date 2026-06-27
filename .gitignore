@@ -9,3 +9,17 @@ npm-debug.log
 !.env.example
 __pycache__/
 *.py[cod]
+
+# --- project-local only: never push to public HF/GitHub ---
+/reference/
+/archive/
+/.artifacts/
+PROJECT_ID.md
+AGENTS.md
+PROJECT_CONTEXT.md
+TASK.md
+LOG.md
+PROJECT_MAP.md
+# internal planning docs — keep local, do not publish
+HF_MIGRATION_PLAN.md
+HF_SPACE_CONSOLIDATION_PLAN.md

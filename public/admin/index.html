@@ -47,7 +47,7 @@
             登录
           </button>
         </div>
-        <p class="field-note" id="loginHint">公开访问的 Space，建议设一个管理口令，把闲人挡在门外。</p>
+        <p class="field-note" id="loginHint">这是公开访问的 Space，建议给后台设个管理口令——这样只有你能进来调配置。</p>
       </section>
 
       <div class="workbench">
@@ -204,7 +204,7 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4" /></svg>
                   维护检查
                 </button>
-                <span class="inline-hint" id="search2apiStatusHint">检查仓库新鲜度与运行接口</span>
+                <span class="inline-hint" id="search2apiStatusHint">看看上游仓库新不新、接口通不通</span>
               </div>
             </section>
 
@@ -213,7 +213,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
                 <h2>密钥中心</h2>
               </div>
-              <p class="panel-note">这里只显示是否已配置和脱敏值，不回显 Cookie、Token 或 API Key 明文。</p>
+              <p class="panel-note">这里只显示配没配过、以及打码后的值，不会亮出 Cookie、Token 或 API Key 的明文。</p>
               <div class="key-status-grid" id="keyStatusGrid"></div>
               <div class="test-row">
                 <span class="inline-hint" id="keyStatusHint">保存配置或刷新后同步状态。</span>
@@ -229,7 +229,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.5 7l2.5 9M15.5 7 13 16M10 5h4" /></svg>
                 <h2>Grok API</h2>
               </div>
-              <p class="panel-note">填写 Grok 或任意 OpenAI-compatible `/v1` 接口。FusionSearch 会把它作为 AI 搜索与总结层，配合 LibreSearch、Search-2api、Tavily 和 Firecrawl 取证。</p>
+              <p class="panel-note">填 Grok，或任意 OpenAI 兼容的 `/v1` 接口。FusionSearch 拿它当 AI 搜索和总结的大脑，再让 LibreSearch、Search-2api、Tavily、Firecrawl 帮它找依据。</p>
               <label class="field">
                 <span>Grok API URL</span>
                 <input id="grokApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/v1" />
@@ -285,7 +285,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h10M4 19h16" /></svg>
                 <h2>Grok 系统提示词</h2>
               </div>
-              <p class="panel-note">只注入给 Grok / OpenAI-compatible chat，用来控制证据标准、中文输出和引用规则。</p>
+              <p class="panel-note">这段只发给 Grok / OpenAI 兼容的对话模型，用来给它定个答题口径：讲依据、说中文、带上出处。</p>
               <label class="field span-2">
                 <span>System Prompt</span>
                 <textarea id="grokSystemPrompt" spellcheck="false" rows="12"></textarea>
@@ -381,7 +381,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 6 12h5l-1 10 8-12h-5l0-8Z" /></svg>
                 <h2>Firecrawl</h2>
               </div>
-              <p class="panel-note">网页抓取托底，Tavily Extract 失败时使用。</p>
+              <p class="panel-note">网页抓取的备胎——Tavily 抓不到时，让它顶上。</p>
               <label class="field">
                 <span>Firecrawl API URL</span>
                 <input id="firecrawlApiUrl" type="url" autocomplete="off" spellcheck="false" />
@@ -462,7 +462,7 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
                   更新安全设置
                 </button>
-                <span class="inline-hint" id="securityHint">Token 不会回显；保存后当前运行时立即生效</span>
+                <span class="inline-hint" id="securityHint">口令不会显示出来；存好马上生效</span>
               </div>
             </section>
             <section class="panel view-panel" data-group-panel="security" data-view-panel="mcp-token" hidden>
@@ -505,7 +505,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
                 <h2>Hugging Face Secrets</h2>
               </div>
-              <p class="panel-note">只填写需要替换的值。已有 Secret 不会回显，保存后重启 Space 才能让运行中容器读取新值。</p>
+              <p class="panel-note">只填你要换的值。已有的 Secret 不会显示出来；存好之后要重启 Space，正在跑的容器才会读到新值。</p>
               <div class="kv-list compact">
                 <div><span>Space</span><strong id="hfSpaceId">-</strong></div>
                 <div><span>写入令牌</span><strong id="hfWriteState">-</strong></div>
@@ -598,7 +598,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" /></svg>
                 <h2>健康看板</h2>
               </div>
-              <p class="panel-note">参考 CheckCle 的状态列表形态，监控 LibreSearch、Search-2api、Grok、Tavily、Firecrawl。默认优先读取最近调用和日志状态，主动探针有冷却保护。</p>
+              <p class="panel-note">这儿盯着 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 五个服务的状态。平时看最近调用和日志就够，手动体检也有冷却，不会乱花额度。</p>
               <div class="monitor-head">
                 <div>
                   <strong id="monitoringCount">5</strong>
