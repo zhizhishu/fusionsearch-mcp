@@ -36,6 +36,7 @@ import {
 } from './smartRouter.js';
 import { SourceCache, mergeSources, newSessionId } from './sourceCache.js';
 import { createAuth } from './auth.js';
+import { createSiteGate } from './siteGate.js';
 import { configureLogger, getLogFilePath, logEvent, readLogEntries } from './logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -2393,6 +2394,23 @@ export function createApp(userConfig = {}) {
     adminToken: config.adminToken,
     sessionSecret: config.sessionSecret,
     mcpAuthToken: config.mcpAuthToken
+  });
+
+  // Site-wide access gate (decoy cover page). When SITE_GATE_PASSWORD is set,
+  // every browser-facing route is hidden behind a single access code; MCP
+  // (Bearer) traffic and /health stay open. Mounted before any other route so
+  // unauthenticated visitors only ever see the cover.
+  const siteGate = createSiteGate({
+    password: config.siteGatePassword ?? process.env.SITE_GATE_PASSWORD ?? '',
+    secret: config.sessionSecret || process.env.SESSION_SECRET || ''
+  });
+  app.use(siteGate.middleware);
+  app.use('/gate', express.static(siteGate.gateDir));
+  app.post('/api/gate/login', asyncHandler(async (req, res) => {
+    siteGate.login(req, res);
+  }));
+  app.post('/api/gate/logout', (req, res) => {
+    siteGate.logout(req, res);
   });
 
   app.use('/admin/assets', express.static(ADMIN_DIR));

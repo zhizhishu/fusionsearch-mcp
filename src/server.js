@@ -53,6 +53,7 @@ const app = createApp({
   adminAuthEnabled: envFlag('ADMIN_AUTH_ENABLED', runtimeConfig.adminAuthEnabled ?? Boolean(initialAdminToken)),
   adminToken: initialAdminToken,
   sessionSecret: process.env.SESSION_SECRET ?? runtimeConfig.sessionSecret ?? '',
+  siteGatePassword: process.env.SITE_GATE_PASSWORD ?? runtimeConfig.siteGatePassword ?? '',
   mcpAuthToken: initialMcpAuthToken,
   runtimeConfigPath,
   saveRuntimeConfig: (nextConfig) => saveRuntimeConfig(nextConfig, runtimeConfigPath)
