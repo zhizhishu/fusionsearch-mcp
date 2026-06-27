@@ -284,7 +284,7 @@ export async function executeSmartResearch({
     evidenceBlocks.push({ provider: 'tavily', title: 'Tavily error', content });
   }
 
-  const sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);
+  let sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);
   const fetched = [];
   if (effectiveDeep) {
     for (const source of sources.filter((item) => item.url).slice(0, 2)) {
@@ -312,7 +312,7 @@ export async function executeSmartResearch({
   }
 
   const anyEvidence = attempts.some((item) => item.status === 'up');
-  const pipeline = buildEvidencePipeline({
+  let pipeline = buildEvidencePipeline({
     query,
     sources,
     evidenceBlocks,
@@ -320,6 +320,51 @@ export async function executeSmartResearch({
     attempts,
     limit: Math.max(effectiveLimit, 1) * 2
   });
+
+  // P2: gap-fill 补搜 —— 首轮交叉验证置信度为 low/medium 时, 追加 1 轮 LibreSearch
+  // (换 categories + time_range, 触达不同信源), 合并后重算 crossCheck。仅 1 轮, 控成本/延迟。
+  // 仅当首轮 LibreSearch 本就可用时才补 (否则同端点必然再失败, 是无谓调用)。
+  let gapFill = null;
+  if (anyEvidence && libre.ok && (pipeline.crossCheck.confidence === 'low' || pipeline.crossCheck.confidence === 'medium')) {
+    const confidenceBefore = pipeline.crossCheck.confidence;
+    const baseCategories = config.defaultParams?.categories || 'general';
+    const altCategories = baseCategories.includes('news') ? 'general' : 'news';
+    const supplementary = await run('libresearch', `LibreSearch 补搜 (gap-fill ${altCategories})`, async () => {
+      const { payload, params } = await executeSearch({
+        endpoint: config.searchEndpoint,
+        defaultParams: config.defaultParams,
+        query,
+        overrides: { pageno: '1', categories: altCategories, time_range: 'year' }
+      });
+      return { payload, params };
+    });
+    if (supplementary.ok) {
+      const supItems = getLibreResultItems(supplementary.value.payload, effectiveLimit)
+        .map((item) => ({ ...item, provider: 'libresearch' }));
+      const content = buildSummaryLines({ query, params: supplementary.value.params, payload: supplementary.value.payload }).join('\n');
+      evidence.push(content);
+      evidenceBlocks.push({ provider: 'libresearch', title: `LibreSearch gap-fill (${altCategories})`, content });
+      sourceGroups.push(supItems);
+      // 补搜结果与首轮信源合并 —— 与 tavily/search2api 命中的同 URL 会因此获得 ≥2 独立源佐证。
+      sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);
+      pipeline = buildEvidencePipeline({
+        query,
+        sources,
+        evidenceBlocks,
+        fetched,
+        attempts,
+        limit: Math.max(effectiveLimit, 1) * 2
+      });
+    }
+    gapFill = {
+      ran: true,
+      ok: supplementary.ok,
+      categories: altCategories,
+      confidenceBefore,
+      confidenceAfter: pipeline.crossCheck.confidence
+    };
+  }
+
   let answer = '';
   if (effectiveSummarize && anyEvidence) {
     const startedAt = Date.now();
@@ -370,6 +415,7 @@ export async function executeSmartResearch({
     attempts,
     providers: providerMap(attempts),
     pipeline,
+    gapFill,
     answer,
     evidence,
     sources: mergeSources(...sourceGroups, pipeline.items).slice(0, 20),
@@ -412,6 +458,14 @@ export function formatSmartResearchResult(result) {
     '## Provider 状态',
     ...formatAttempts(result.attempts)
   ];
+  if (result.gapFill?.ran) {
+    lines.push(
+      '',
+      '## 补搜 (gap-fill)',
+      `- 触发: 首轮置信度 ${result.gapFill.confidenceBefore}; 补搜类目: ${result.gapFill.categories}; 结果: ${result.gapFill.ok ? '成功' : '失败'}`,
+      `- 置信度变化: ${result.gapFill.confidenceBefore} → ${result.gapFill.confidenceAfter}`
+    );
+  }
   if (result.answer) {
     lines.push('', '## 汇总答案', result.answer);
   } else if (result.mode === 'keyword') {
