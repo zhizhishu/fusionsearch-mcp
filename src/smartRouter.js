@@ -12,6 +12,7 @@ import {
   formatEvidencePipeline
 } from './fusionOrchestrator.js';
 import { mergeSources } from './sourceCache.js';
+import { resolveSmartStrategy } from './smartStrategies.js';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAX_CONTENT_FOR_GROK = 12_000;
@@ -157,9 +158,10 @@ export async function executeSmartResearch({
   config,
   input,
   question = '',
-  limit = 5,
-  deep = false,
-  summarize = true,
+  limit,
+  deep,
+  summarize,
+  strategy,
   timeoutMs = 60_000,
   monitor
 }) {
@@ -168,13 +170,21 @@ export async function executeSmartResearch({
     throw new Error('smart_research 需要关键词、问题或 URL');
   }
 
+  // 档位预设：未指定 strategy 时保持现状默认（limit=5, deep=false, summarize=true）。
+  // 指定 strategy 时，显式入参优先，其次档位预设，最后内置默认。
+  const resolvedStrategy = strategy ? resolveSmartStrategy(strategy) : null;
+  const effectiveLimit = limit ?? resolvedStrategy?.limit ?? 5;
+  const effectiveDeep = deep ?? resolvedStrategy?.deep ?? false;
+  const effectiveSummarize = summarize ?? resolvedStrategy?.summarize ?? true;
+  const strategyOverrides = resolvedStrategy?.searchOverrides || {};
+
   const url = normalizeUrl(normalizedInput);
   if (url) {
     return executeSmartFetch({
       config,
       url,
       question,
-      summarize: summarize || Boolean(question.trim()),
+      summarize: effectiveSummarize || Boolean(question.trim()),
       timeoutMs,
       monitor
     });
@@ -228,19 +238,24 @@ export async function executeSmartResearch({
         endpoint: config.searchEndpoint,
         defaultParams: config.defaultParams,
         query,
-        overrides: { pageno: '1', categories: config.defaultParams?.categories || 'general' }
+        // strategyOverrides 的 categories/time_range 会覆盖默认值并真正进入 LibreSearch/SearXNG 查询串。
+        overrides: {
+          pageno: '1',
+          categories: config.defaultParams?.categories || 'general',
+          ...strategyOverrides
+        }
       });
       return { payload, params };
     }),
     run('search2api', 'Search-2api 答案', () => callSearch2Api(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 90_000) })),
-    run('tavily', 'Tavily Search', () => executeTavilySearchOnly({ config, query, maxResults: limit }))
+    run('tavily', 'Tavily Search', () => executeTavilySearchOnly({ config, query, maxResults: effectiveLimit }))
   ]);
 
   if (libre.ok) {
     const content = buildSummaryLines({ query, params: libre.value.params, payload: libre.value.payload }).join('\n');
     evidence.push(content);
     evidenceBlocks.push({ provider: 'libresearch', title: 'LibreSearch structured results', content });
-    sourceGroups.push(getLibreResultItems(libre.value.payload, limit).map((item) => ({ ...item, provider: 'libresearch' })));
+    sourceGroups.push(getLibreResultItems(libre.value.payload, effectiveLimit).map((item) => ({ ...item, provider: 'libresearch' })));
   } else {
     const content = `## LibreSearch\n失败: ${libre.error}`;
     evidence.push(content);
@@ -259,7 +274,7 @@ export async function executeSmartResearch({
 
   if (tavily.ok) {
     const results = tavily.value.results || [];
-    const content = formatSourceEvidence('Tavily', results, limit);
+    const content = formatSourceEvidence('Tavily', results, effectiveLimit);
     evidence.push(content);
     evidenceBlocks.push({ provider: 'tavily', title: 'Tavily search results', content });
     sourceGroups.push(results);
@@ -269,9 +284,9 @@ export async function executeSmartResearch({
     evidenceBlocks.push({ provider: 'tavily', title: 'Tavily error', content });
   }
 
-  const sources = mergeSources(...sourceGroups).slice(0, Math.max(limit, 1) * 2);
+  const sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);
   const fetched = [];
-  if (deep) {
+  if (effectiveDeep) {
     for (const source of sources.filter((item) => item.url).slice(0, 2)) {
       const fetchedResult = await executeSmartFetch({
         config,
@@ -303,10 +318,10 @@ export async function executeSmartResearch({
     evidenceBlocks,
     fetched,
     attempts,
-    limit: Math.max(limit, 1) * 2
+    limit: Math.max(effectiveLimit, 1) * 2
   });
   let answer = '';
-  if (summarize && anyEvidence) {
+  if (effectiveSummarize && anyEvidence) {
     const startedAt = Date.now();
     try {
       const result = await executeGrokWebSearch({
@@ -350,6 +365,7 @@ export async function executeSmartResearch({
   return {
     ok: anyEvidence,
     mode: 'keyword',
+    strategy: resolvedStrategy?.id ?? 'fast',
     query,
     attempts,
     providers: providerMap(attempts),

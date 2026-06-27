@@ -35,6 +35,7 @@ import {
   formatSmartResearchResult
 } from './smartRouter.js';
 import { SourceCache, mergeSources, newSessionId } from './sourceCache.js';
+import { SMART_STRATEGY_IDS } from './smartStrategies.js';
 import { createAuth } from './auth.js';
 import { createSiteGate } from './siteGate.js';
 import { configureLogger, getLogFilePath, logEvent, readLogEntries } from './logger.js';
@@ -1961,9 +1962,10 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
     const smartResearchShape = {
       input: z.string().trim().min(1).describe('关键词、自然语言问题或 URL'),
       question: z.string().trim().describe('当 input 是 URL 时，可填写针对该网页的问题').optional(),
-      limit: z.number().int().min(1).max(20).describe('每个搜索源最多采用的结果数量，默认 5；调大可拿到更广信源（类似 extra_sources），20 接近上限').optional(),
-      deep: z.boolean().describe('是否抓取前 2 个候选网页正文，默认 false 以节省额度').optional(),
-      summarize: z.boolean().describe('是否交给 Grok 汇总，默认 true；Grok 失败时仍返回证据').optional(),
+      strategy: z.enum(SMART_STRATEGY_IDS).describe('搜索档位预设，缺省时保持现状默认（等价 fast）；fast=轻量多源、deep=多源+抓正文、url_fetch=偏向 URL 提取、news_time=偏新闻近一周、it_docs=偏技术文档。显式 limit/deep/summarize 优先于档位').optional(),
+      limit: z.number().int().min(1).max(20).describe('每个搜索源最多采用的结果数量，默认 5；调大可拿到更广信源（类似 extra_sources），20 接近上限。显式给出时覆盖档位预设').optional(),
+      deep: z.boolean().describe('是否抓取前 2 个候选网页正文，默认 false 以节省额度。显式给出时覆盖档位预设').optional(),
+      summarize: z.boolean().describe('是否交给 Grok 汇总，默认 true；Grok 失败时仍返回证据。显式给出时覆盖档位预设').optional(),
       timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
     };
     const smartResearchSchema = z.object(smartResearchShape);
@@ -1980,9 +1982,12 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
           config,
           input: parsed.input,
           question: parsed.question || '',
-          limit: parsed.limit ?? 5,
-          deep: Boolean(parsed.deep),
-          summarize: parsed.summarize !== false,
+          // 透传原始（可能为 undefined）值，由 executeSmartResearch 结合 strategy 做缺省合并；
+          // 未指定 strategy 时缺省等价于现状（limit=5, deep=false, summarize=true）。
+          limit: parsed.limit,
+          deep: parsed.deep,
+          summarize: parsed.summarize,
+          strategy: parsed.strategy,
           timeoutMs: parsed.timeoutMs,
           monitor: monitoring
         });

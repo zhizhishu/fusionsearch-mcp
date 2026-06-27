@@ -78,6 +78,12 @@ export function buildResearchSynthesisPrompt(pipeline) {
     `Cross-check confidence: ${pipeline.crossCheck.confidence}`,
     `Cross-check reasons: ${pipeline.crossCheck.reasons.join('; ') || 'No specific reason'}`,
     '',
+    'Per-evidence corroboration (top ranked, independent source support):',
+    formatTopCorroboration(pipeline.crossCheck.topCorroboration),
+    pipeline.crossCheck.singleSourceTopCount
+      ? `单源警告: top ${pipeline.crossCheck.topCorroboration.length} 条证据中有 ${pipeline.crossCheck.singleSourceTopCount} 条仅单源支持，下结论时请注明独立佐证不足。`
+      : '',
+    '',
     'Ranked evidence:',
     evidenceLines.join('\n\n---\n\n') || 'No normalized evidence.',
     '',
@@ -116,6 +122,15 @@ export function formatEvidencePipeline(pipeline) {
     '',
     '## 交叉验证',
     ...pipeline.crossCheck.reasons.map((reason) => `- ${reason}`),
+    ...(pipeline.crossCheck.topCorroboration?.length
+      ? [
+          '',
+          '## 逐条佐证 (前 5 条)',
+          ...pipeline.crossCheck.topCorroboration.map((item, index) => (
+            `- [${index + 1}] ${item.title} — 佐证: ${item.providerCount} 源 (${item.providers.join(', ') || '未知'})`
+          ))
+        ]
+      : []),
     '',
     '## 排序证据'
   ].filter(Boolean);
@@ -215,7 +230,7 @@ function mergeInto(target, item) {
   };
 }
 
-function buildCrossCheck({ items, attempts }) {
+export function buildCrossCheck({ items, attempts }) {
   const evidenceByProvider = new Map();
   for (const item of items) {
     for (const provider of item.matchedProviders) {
@@ -237,16 +252,37 @@ function buildCrossCheck({ items, attempts }) {
   const upProviderCount = providerCoverage.filter((item) => item.status === 'up' && item.evidenceCount > 0).length;
   const multiProviderEvidence = items.filter((item) => item.matchedProviders.length > 1).length;
   const fetchedEvidence = items.filter((item) => item.signals.fetched || item.signals.hasContent).length;
+
+  // 逐条佐证：每条证据被多少个独立 provider 返回。corroboratedItems = 至少 2 源佐证的条数。
+  const corroboratedItems = items.filter((item) => (item.matchedProviders?.length || 0) >= 2).length;
+
+  // 逐源佐证明细：items 已按 score 降序排列，取排在前面的 top 5。
+  const topCorroboration = items.slice(0, 5).map((item) => {
+    const itemProviders = Array.from(new Set(item.matchedProviders || []));
+    return {
+      title: item.title || truncateLabel(item.url) || 'Untitled evidence',
+      providerCount: itemProviders.length,
+      providers: itemProviders
+    };
+  });
+  const singleSourceTopCount = topCorroboration.filter((item) => item.providerCount <= 1).length;
+  const topIsSingleSource = Boolean(topCorroboration[0]) && topCorroboration[0].providerCount <= 1;
+
   const reasons = [
     `${upProviderCount} 个 provider 返回可用证据`,
     `${multiProviderEvidence} 条证据获得多 provider 支持`,
+    `${corroboratedItems} 条证据获 ≥2 独立源佐证`,
     `${fetchedEvidence} 条证据包含正文或抓取内容`
   ];
+  if (topIsSingleSource) {
+    reasons.push('最佳信源仅单源支持，置信度受限');
+  }
 
+  // 置信度奖励"独立佐证"而非单纯 provider 数。
   let confidence = 'low';
-  if (upProviderCount >= 3 && (multiProviderEvidence >= 2 || fetchedEvidence >= 2)) {
+  if (upProviderCount >= 3 && corroboratedItems >= 2) {
     confidence = 'high';
-  } else if (upProviderCount >= 2 || multiProviderEvidence >= 1 || fetchedEvidence >= 1) {
+  } else if ((upProviderCount >= 2 && corroboratedItems >= 1) || fetchedEvidence >= 2) {
     confidence = 'medium';
   }
   if (!items.length) {
@@ -259,7 +295,10 @@ function buildCrossCheck({ items, attempts }) {
     providerCoverage,
     reasons,
     multiProviderEvidence,
-    fetchedEvidence
+    fetchedEvidence,
+    corroboratedItems,
+    topCorroboration,
+    singleSourceTopCount
   };
 }
 
@@ -275,6 +314,19 @@ function scoreEvidence(item) {
     descriptionBonus +
     contentBonus +
     (item.signals?.fetched ? 1.2 : 0);
+}
+
+function formatTopCorroboration(topCorroboration = []) {
+  if (!topCorroboration.length) return '- No ranked evidence to corroborate.';
+  return topCorroboration.map((item, index) => {
+    const providers = item.providers?.length ? item.providers.join(', ') : 'unknown';
+    return `- [${index + 1}] ${item.title} — 佐证: ${item.providerCount} 源 (${providers})`;
+  }).join('\n');
+}
+
+function truncateLabel(value = '', max = 80) {
+  const text = String(value || '').trim();
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 function formatAttemptSummary(attempts = []) {
