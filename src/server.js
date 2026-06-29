@@ -1,11 +1,38 @@
 import { createApp } from './app.js';
 import { configureLogger, logEvent } from './logger.js';
 import { getRuntimeConfigPath, loadRuntimeConfig, saveRuntimeConfig } from './runtimeConfig.js';
+import {
+  supabaseEnabled,
+  ensureBucket,
+  restoreRuntimeConfig,
+  backupRuntimeConfig,
+  supabaseStoreInfo
+} from './supabaseStore.js';
 
 const PORT = Number.parseInt(process.env.PORT ?? '1666', 10);
 const runtimeConfigPath = getRuntimeConfigPath();
-const runtimeConfig = await loadRuntimeConfig(runtimeConfigPath);
 configureLogger({ logDir: process.env.LOG_DIR });
+
+// On ephemeral hosts (HF Spaces) hydrate runtime.json from Supabase before the
+// local config is read, so Admin edits survive a rebuild. No-op when unset.
+if (supabaseEnabled()) {
+  try {
+    await ensureBucket();
+    const restored = await restoreRuntimeConfig(runtimeConfigPath);
+    logEvent(
+      'info',
+      'supabase',
+      restored ? 'Runtime config restored from Supabase' : 'No Supabase snapshot yet, starting fresh',
+      {}
+    );
+  } catch (error) {
+    logEvent('warn', 'supabase', 'Runtime config restore skipped', {
+      error: String(error?.message || error)
+    });
+  }
+}
+
+const runtimeConfig = await loadRuntimeConfig(runtimeConfigPath);
 const initialAdminToken = process.env.ADMIN_TOKEN ?? runtimeConfig.adminToken ?? '';
 const initialMcpAuthToken = process.env.MCP_AUTH_TOKEN ?? runtimeConfig.mcpAuthToken ?? '';
 const envFlag = (name, fallback = false) => {
@@ -56,7 +83,17 @@ const app = createApp({
   siteGatePassword: process.env.SITE_GATE_PASSWORD ?? runtimeConfig.siteGatePassword ?? '',
   mcpAuthToken: initialMcpAuthToken,
   runtimeConfigPath,
-  saveRuntimeConfig: (nextConfig) => saveRuntimeConfig(nextConfig, runtimeConfigPath)
+  saveRuntimeConfig: async (nextConfig) => {
+    await saveRuntimeConfig(nextConfig, runtimeConfigPath);
+    if (supabaseEnabled()) {
+      // Mirror the save to Supabase without blocking the Admin response.
+      backupRuntimeConfig(runtimeConfigPath).catch((error) =>
+        logEvent('warn', 'supabase', 'Runtime config backup failed', {
+          error: String(error?.message || error)
+        })
+      );
+    }
+  }
 });
 
 app.listen(PORT, () => {
@@ -65,4 +102,22 @@ app.listen(PORT, () => {
     port: PORT,
     runtimeConfigPath
   });
+  if (supabaseEnabled()) {
+    const everyMs = Number.parseInt(process.env.SUPABASE_BACKUP_INTERVAL_MS ?? '300000', 10);
+    if (Number.isFinite(everyMs) && everyMs > 0) {
+      const timer = setInterval(() => {
+        backupRuntimeConfig(runtimeConfigPath).catch((error) =>
+          logEvent('warn', 'supabase', 'Periodic backup failed', {
+            error: String(error?.message || error)
+          })
+        );
+      }, everyMs);
+      timer.unref?.();
+    }
+    logEvent('info', 'supabase', 'Supabase persistence enabled', {
+      bucket: supabaseStoreInfo.bucket,
+      object: supabaseStoreInfo.object,
+      intervalMs: everyMs
+    });
+  }
 });

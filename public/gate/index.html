@@ -4,25 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
-  <meta name="theme-color" content="#161828" />
-  <title>CloudSpace · 网站演示动画参考</title>
+  <meta name="theme-color" content="#0d0e1a" />
+  <title>FusionSearch · Access</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink: #f2d8e2;
+      --ink: #eef1ff;
       --pink: #e87fa0;
       --cyan: #7ad4e8;
-      --rose: #c9647e;
-      --dim: rgba(242, 216, 226, 0.42);
+      --bg: #0d0e1a;
       --font: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
         "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
-      background: #161828; color: var(--ink);
+      background: var(--bg); color: var(--ink);
       font-family: var(--font); -webkit-font-smoothing: antialiased;
       user-select: none; cursor: default;
     }
@@ -30,7 +29,7 @@
 
     /* film grain */
     .grain {
-      position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: 0.04;
+      position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: 0.05;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
       background-size: 180px 180px;
     }
@@ -43,27 +42,29 @@
     }
     .badge.show { opacity: 1; }
     .badge .dot {
-      width: 5px; height: 5px; border-radius: 50%; background: var(--pink);
+      width: 5px; height: 5px; border-radius: 50%; background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
       animation: dotPulse 2s ease-in-out infinite;
     }
     .badge .txt {
-      font-size: 9px; font-weight: 500; letter-spacing: 0.28em;
-      text-transform: uppercase; color: rgba(242, 216, 226, 0.5);
+      font-size: 9px; font-weight: 600; letter-spacing: 0.3em;
+      text-transform: uppercase; color: rgba(238, 241, 255, 0.62);
     }
-    .badge .sub { color: rgba(242, 216, 226, 0.3); }
+    .badge .sub { color: rgba(122, 212, 232, 0.5); font-weight: 500; }
 
     /* bottom hint */
     .hint {
       position: fixed; left: 0; right: 0; bottom: 30px; z-index: 40;
       text-align: center; font-size: 9.5px; font-weight: 400;
       letter-spacing: 0.34em; text-transform: uppercase;
-      color: rgba(242, 216, 226, 0.34); pointer-events: none;
+      color: rgba(238, 241, 255, 0.36); pointer-events: none;
       opacity: 0; transition: opacity 1.2s ease;
     }
     .hint.show { opacity: 1; }
     .hint .k {
       display: inline-block; width: 4px; height: 4px; border-radius: 50%;
       background: var(--cyan); margin-right: 9px; vertical-align: middle;
+      box-shadow: 0 0 6px var(--cyan);
       animation: blink 1.7s ease-in-out infinite;
     }
 
@@ -72,12 +73,12 @@
       position: fixed; z-index: 50; left: 50%; top: 50%;
       transform: translate(-50%, -50%) scale(0.94);
       width: min(330px, 86vw); padding: 22px 24px 20px;
-      background: rgba(14, 10, 28, 0.62);
+      background: rgba(13, 14, 26, 0.62);
       backdrop-filter: blur(26px) saturate(150%);
       -webkit-backdrop-filter: blur(26px) saturate(150%);
-      border: 1px solid rgba(232, 127, 160, 0.24); border-radius: 8px;
-      box-shadow: inset 0 1px 0 rgba(255, 210, 230, 0.07), 0 18px 60px rgba(0, 0, 0, 0.5),
-        0 0 70px rgba(232, 127, 160, 0.08);
+      border: 1px solid rgba(122, 212, 232, 0.26); border-radius: 9px;
+      box-shadow: inset 0 1px 0 rgba(200, 240, 255, 0.08), 0 18px 60px rgba(0, 0, 0, 0.55),
+        0 0 70px rgba(122, 212, 232, 0.1);
       display: none; flex-direction: column; align-items: center; gap: 14px;
       opacity: 0;
     }
@@ -85,31 +86,31 @@
     .gate.shake { animation: shake 0.5s both; }
     .gate-label {
       font-size: 8px; font-weight: 600; letter-spacing: 0.38em;
-      text-transform: uppercase; color: rgba(232, 127, 160, 0.62);
+      text-transform: uppercase; color: rgba(122, 212, 232, 0.7);
     }
     .gate form { display: flex; align-items: center; gap: 11px; }
     .gate input {
       width: 168px; padding: 9px 14px; text-align: center;
       background: rgba(255, 255, 255, 0.04); border: none;
-      border-bottom: 1.5px solid rgba(232, 127, 160, 0.3);
+      border-bottom: 1.5px solid rgba(122, 212, 232, 0.34);
       color: var(--ink); font-family: var(--font); font-size: 14px;
-      letter-spacing: 0.28em; caret-color: var(--pink); outline: none;
+      letter-spacing: 0.28em; caret-color: var(--cyan); outline: none;
       transition: border-color 0.2s;
     }
-    .gate input::placeholder { color: rgba(242, 216, 226, 0.3); letter-spacing: 0.2em; }
-    .gate input:focus { border-bottom-color: rgba(232, 127, 160, 0.85); }
+    .gate input::placeholder { color: rgba(238, 241, 255, 0.3); letter-spacing: 0.2em; }
+    .gate input:focus { border-bottom-color: rgba(122, 212, 232, 0.9); }
     .gate .key {
       display: flex; align-items: center; justify-content: center;
       width: 32px; height: 32px; flex-shrink: 0; background: transparent;
-      border: 1px solid rgba(232, 127, 160, 0.3); border-radius: 50%;
+      border: 1px solid rgba(122, 212, 232, 0.34); border-radius: 50%;
       cursor: pointer; transition: background 0.2s, border-color 0.2s;
     }
-    .gate .key:hover { background: rgba(232, 127, 160, 0.12); border-color: rgba(232, 127, 160, 0.7); }
+    .gate .key:hover { background: rgba(122, 212, 232, 0.14); border-color: rgba(122, 212, 232, 0.75); }
     .gate-err {
       min-height: 11px; font-size: 8px; letter-spacing: 0.24em;
-      text-transform: uppercase; color: rgba(220, 100, 110, 0.85);
+      text-transform: uppercase; color: rgba(232, 127, 160, 0.92);
     }
-    .gate-ok .gate-err { color: rgba(140, 224, 168, 0.9); }
+    .gate-ok .gate-err { color: rgba(122, 212, 232, 0.95); }
 
     @keyframes panelIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
     @keyframes dotPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.3); } }
@@ -127,8 +128,8 @@
 
   <div class="badge" id="badge" aria-hidden="true">
     <span class="dot"></span>
-    <span class="txt">CloudSpace</span>
-    <span class="txt sub">演示动画参考</span>
+    <span class="txt">FusionSearch</span>
+    <span class="txt sub">Access</span>
   </div>
 
   <div class="hint" id="hint" aria-hidden="true"><span class="k"></span>凝视她的右眼</div>
@@ -139,10 +140,10 @@
       <input id="pw" type="password" placeholder="访问口令" autocomplete="current-password" aria-label="访问口令" />
       <button class="key" type="submit" aria-label="进入">
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <circle cx="5" cy="5.5" r="3.2" stroke="rgba(232,127,160,0.85)" stroke-width="1.2" />
-          <line x1="7.6" y1="7.6" x2="12" y2="12" stroke="rgba(232,127,160,0.85)" stroke-width="1.2" stroke-linecap="round" />
-          <line x1="10" y1="10.8" x2="10" y2="12.4" stroke="rgba(232,127,160,0.85)" stroke-width="1.2" stroke-linecap="round" />
-          <line x1="11.6" y1="10" x2="13.2" y2="10" stroke="rgba(232,127,160,0.85)" stroke-width="1.2" stroke-linecap="round" />
+          <circle cx="5" cy="5.5" r="3.2" stroke="rgba(122,212,232,0.9)" stroke-width="1.2" />
+          <line x1="7.6" y1="7.6" x2="12" y2="12" stroke="rgba(122,212,232,0.9)" stroke-width="1.2" stroke-linecap="round" />
+          <line x1="10" y1="10.8" x2="10" y2="12.4" stroke="rgba(122,212,232,0.9)" stroke-width="1.2" stroke-linecap="round" />
+          <line x1="11.6" y1="10" x2="13.2" y2="10" stroke="rgba(122,212,232,0.9)" stroke-width="1.2" stroke-linecap="round" />
         </svg>
       </button>
     </form>
@@ -153,7 +154,11 @@
   <script>
   (function () {
     "use strict";
-    var DEBUG = /[?&]debug=1/.test(location.search);
+    var qs = location.search;
+    var DEBUG = /[?&]debug=1/.test(qs);
+    var SKIPTO = (qs.match(/[?&]skipto=([a-z]+)/) || [])[1] || "";
+    var HOLD = (qs.match(/[?&]hold=([a-z]+)/) || [])[1] || "";  // freeze a phase mid-way for capture
+    var REDUCE = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     var canvas = document.getElementById("stage");
     var ctx = canvas.getContext("2d");
@@ -164,29 +169,45 @@
     var pw = document.getElementById("pw");
     var err = document.getElementById("err");
 
-    // ── Calibrated to cover.jpg (1600x800). Normalised image coords. ──
-    var LOGIN_EYE = { x: 0.464, y: 0.384 };  // character's RIGHT eye (viewer-left) — hidden login
-    var OTHER_EYE = { x: 0.606, y: 0.377 };  // character's left eye (viewer-right)
-    var SEED      = { x: 0.523, y: 0.500 };  // growth origin
+    // ── Calibrated to 金克斯.png (1672x941). Normalised image coords [0..1]. ──
+    var LOGIN_EYE = { x: 0.353, y: 0.262 };  // her RIGHT eye (viewer-left) — hidden login hotspot
+    var OTHER_EYE = { x: 0.391, y: 0.268 };  // her left eye (viewer-right)
+    var MUZZLE    = { x: 0.930, y: 0.128 };  // gun muzzle — growth SEED
+    var GUN_GRIP  = { x: 0.752, y: 0.356 };  // grip / hand
+    var GUN_CYL   = { x: 0.787, y: 0.208 };  // revolver cylinder
 
-    // Growth tendrils (seed -> outward). cubic bezier in normalised image coords.
-    var PATHS = [
-      { p: [0.523,0.500, 0.42,0.28, 0.22,0.10, 0.06,0.18], c: "122,212,232", d: 0.00, w: 2.4 },
-      { p: [0.523,0.500, 0.64,0.26, 0.82,0.08, 0.96,0.18], c: "122,212,232", d: 0.03, w: 2.4 },
-      { p: [0.523,0.500, 0.38,0.30, 0.16,0.20, 0.02,0.42], c: "157,232,245", d: 0.06, w: 1.5 },
-      { p: [0.523,0.500, 0.66,0.30, 0.86,0.20, 0.99,0.42], c: "157,232,245", d: 0.08, w: 1.5 },
-      { p: [0.523,0.500, 0.46,0.24, 0.40,0.06, 0.36,-0.05], c: "122,212,232", d: 0.12, w: 1.2 },
-      { p: [0.523,0.500, 0.58,0.24, 0.64,0.06, 0.70,-0.05], c: "122,212,232", d: 0.14, w: 1.2 },
-      { p: [0.523,0.500, 0.45,0.45, 0.41,0.35, 0.47,0.27], c: "232,127,160", d: 0.20, w: 1.3 },
-      { p: [0.523,0.500, 0.60,0.45, 0.64,0.35, 0.58,0.27], c: "232,127,160", d: 0.22, w: 1.3 },
-      { p: [0.523,0.500, 0.40,0.70, 0.28,0.86, 0.22,1.04], c: "232,127,160", d: 0.26, w: 1.4 },
-      { p: [0.523,0.500, 0.66,0.70, 0.80,0.86, 0.88,1.04], c: "232,127,160", d: 0.26, w: 1.4 }
+    var CY = "122,212,232";   // cyan
+    var CYL = "168,236,247";  // light cyan
+    var MG = "232,127,160";   // magenta
+    var WH = "240,250,255";   // white core
+    var EM = "255,176,118";   // warm ember
+
+    // Energy tendrils grown from MUZZLE outward, tracing barrel -> grip -> arm ->
+    // torso -> braids (swept left) -> hair. cubic bezier in normalised image coords:
+    // [x0,y0, c1x,c1y, c2x,c2y, x3,y3]
+    var TENDRILS = [
+      // muzzle余焰 — short forward sprays (up-right, off frame)
+      { p: [0.930,0.128, 0.965,0.085, 0.99,0.06, 1.03,0.03],  c: WH,  d: 0.00, w: 1.6, spray: 1 },
+      { p: [0.930,0.128, 0.975,0.14,  1.00,0.14, 1.05,0.16],  c: CY,  d: 0.03, w: 1.4, spray: 1 },
+      { p: [0.930,0.128, 0.945,0.075, 0.95,0.03, 0.96,-0.04], c: CYL, d: 0.06, w: 1.2, spray: 1 },
+      // main back-sweep along the body
+      { p: [0.930,0.128, 0.875,0.16,  0.81,0.215, 0.752,0.356], c: CYL, d: 0.05, w: 2.6 }, // barrel->cyl->grip
+      { p: [0.930,0.128, 0.83,0.21,   0.69,0.36,  0.56,0.42],   c: CY,  d: 0.12, w: 2.2 }, // arm->shoulder
+      { p: [0.930,0.128, 0.80,0.25,   0.58,0.46,  0.43,0.58],   c: CY,  d: 0.20, w: 1.9 }, // chest
+      { p: [0.930,0.128, 0.78,0.30,   0.55,0.56,  0.42,0.73],   c: MG,  d: 0.28, w: 1.8 }, // waist
+      { p: [0.930,0.128, 0.74,0.34,   0.55,0.62,  0.48,0.71],   c: MG,  d: 0.34, w: 1.5 }, // braid loop @ body
+      { p: [0.930,0.128, 0.64,0.30,   0.30,0.55,  0.04,0.62],   c: CY,  d: 0.30, w: 1.7 }, // long braid -> far left low
+      { p: [0.930,0.128, 0.62,0.27,   0.27,0.43,  0.02,0.50],   c: CYL, d: 0.38, w: 1.5 }, // braid -> far left mid
+      { p: [0.930,0.128, 0.60,0.24,   0.33,0.34,  0.135,0.385], c: CY,  d: 0.44, w: 1.3 }, // braid -> left upper
+      { p: [0.930,0.128, 0.63,0.19,   0.46,0.12,  0.355,0.075], c: CYL, d: 0.40, w: 1.4 }, // up to hair crown
+      { p: [0.930,0.128, 0.60,0.23,   0.45,0.25,  0.372,0.28],  c: MG,  d: 0.50, w: 1.1 }  // toward face/eye
     ];
-    var HAIR_IDLE = [
-      { p: [0.523,0.500, 0.42,0.28, 0.22,0.10, 0.06,0.18], ph: 0.0, amp: 0.012 },
-      { p: [0.523,0.500, 0.64,0.26, 0.82,0.08, 0.96,0.18], ph: 1.2, amp: 0.011 },
-      { p: [0.523,0.500, 0.38,0.30, 0.16,0.20, 0.02,0.42], ph: 2.1, amp: 0.016 },
-      { p: [0.523,0.500, 0.66,0.30, 0.86,0.20, 0.99,0.42], ph: 0.7, amp: 0.016 }
+    // idle wisps — short local strands tracing the braids/hair only (very faint sway)
+    var WISPS = [
+      { p: [0.30,0.34, 0.18,0.40, 0.10,0.47, 0.045,0.56], ph: 0.0, amp: 0.012 }, // upper left braid
+      { p: [0.27,0.41, 0.16,0.47, 0.08,0.51, 0.02,0.56],  ph: 1.3, amp: 0.011 }, // lower left braid
+      { p: [0.52,0.50, 0.60,0.58, 0.60,0.68, 0.50,0.71],  ph: 2.2, amp: 0.013 }, // looping braid @ body
+      { p: [0.335,0.16, 0.315,0.24, 0.315,0.32, 0.325,0.40], ph: 0.7, amp: 0.008 } // hair strand by face
     ];
 
     var img = new Image();
@@ -205,9 +226,9 @@
     window.addEventListener("resize", resize);
     resize();
 
-    // cover-fit transform for the image onto the viewport
+    // cover-fit transform of the image onto the viewport (reads natural size)
     function fit() {
-      var iw = img.naturalWidth || 1600, ih = img.naturalHeight || 800;
+      var iw = img.naturalWidth || 1672, ih = img.naturalHeight || 941;
       var s = Math.max(W / iw, H / ih);
       var dw = iw * s, dh = ih * s;
       return { s: s, dw: dw, dh: dh, dx: (W - dw) / 2, dy: (H - dh) / 2, iw: iw, ih: ih };
@@ -216,6 +237,7 @@
       var f = fit();
       return { x: f.dx + n.x * f.dw, y: f.dy + n.y * f.dh };
     }
+    function eyeRadius() { return Math.max(28, fit().s * 1672 * 0.026); }
 
     function cubic(p, t) {
       var m = 1 - t;
@@ -227,55 +249,114 @@
     function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
     function easeIO(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
 
-    // draw a bezier (normalised image coords) up to progress, in screen space
-    function drawPath(p, progress, rgb, lw, alpha) {
+    // draw a normalised-coords bezier up to `progress`, in screen space, with glow.
+    // emits a particle at the growing tip when `tipFn` is given.
+    function drawPath(p, progress, rgb, lw, alpha, tipFn) {
       if (progress <= 0 || alpha <= 0) return;
       var f = fit();
       function C(nx, ny) { return { x: f.dx + nx * f.dw, y: f.dy + ny * f.dh }; }
       var pts = [C(p[0],p[1]), C(p[2],p[3]), C(p[4],p[5]), C(p[6],p[7])];
       var sp = [pts[0].x,pts[0].y, pts[1].x,pts[1].y, pts[2].x,pts[2].y, pts[3].x,pts[3].y];
-      var steps = Math.max(2, Math.ceil(progress * 60));
+      var N = 64, steps = Math.max(2, Math.ceil(progress * N));
       ctx.beginPath();
       ctx.moveTo(sp[0], sp[1]);
+      var q = pts[0];
       for (var i = 1; i <= steps; i++) {
-        var t = Math.min(progress, i / 60);
-        var q = cubic(sp, t);
+        var t = Math.min(progress, i / N);
+        q = cubic(sp, t);
         ctx.lineTo(q.x, q.y);
       }
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = "rgba(" + rgb + ",1)";
       ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.shadowColor = "rgba(" + rgb + ",0.9)"; ctx.shadowBlur = 13;
+      ctx.shadowColor = "rgba(" + rgb + ",0.95)"; ctx.shadowBlur = 14;
+      ctx.stroke();
+      // bright inner core
+      ctx.strokeStyle = "rgba(" + WH + "," + (0.5 * alpha) + ")";
+      ctx.lineWidth = Math.max(0.6, lw * 0.4); ctx.shadowBlur = 4;
       ctx.stroke();
       ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      if (tipFn && progress < 1) tipFn(q.x, q.y, rgb);
     }
 
-    // particles
+    // ── particles (sparks + embers) ──
     var parts = [];
-    function spawn(cx, cy, burst) {
-      var n = burst ? 14 : 1;
+    function spark(cx, cy, n, spread, speed, up) {
       for (var i = 0; i < n; i++) {
         var a = Math.random() * Math.PI * 2;
-        var sp = burst ? 1.5 + Math.random()*3 : 0.3 + Math.random()*1.2;
+        var sp = speed * (0.4 + Math.random());
         parts.push({
-          x: cx + (Math.random()-0.5)*(burst?60:20),
-          y: cy + (Math.random()-0.5)*(burst?60:20),
-          vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - (burst?1.5:0.4),
-          r: 1 + Math.random()*(burst?2.5:1.5), a: 0.85 + Math.random()*0.15,
-          c: Math.random() > 0.5 ? "122,212,232" : "232,127,160"
+          x: cx + (Math.random()-0.5)*spread, y: cy + (Math.random()-0.5)*spread,
+          vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - (up||0),
+          r: 0.8 + Math.random()*2.0, a: 0.85 + Math.random()*0.15, g: 0.022,
+          c: Math.random() > 0.5 ? CY : MG
         });
       }
     }
+    function ember(cx, cy) {
+      parts.push({
+        x: cx + (Math.random()-0.5)*16, y: cy + (Math.random()-0.5)*10,
+        vx: (Math.random()-0.2)*0.5, vy: -(0.4 + Math.random()*0.8),
+        r: 0.7 + Math.random()*1.4, a: 0.7 + Math.random()*0.25, g: -0.006,
+        c: Math.random() > 0.4 ? EM : CY, ember: 1
+      });
+    }
+    function drawParts() {
+      ctx.globalCompositeOperation = "lighter";
+      for (var k = parts.length - 1; k >= 0; k--) {
+        var p = parts[k];
+        p.x += p.vx; p.y += p.vy; p.vy += p.g; p.vx *= 0.992;
+        p.a -= p.ember ? 0.006 : 0.011;
+        if (p.a <= 0) { parts.splice(k, 1); continue; }
+        ctx.globalAlpha = Math.max(0, p.a);
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7);
+        ctx.fillStyle = "rgba(" + p.c + ",1)";
+        ctx.shadowColor = "rgba(" + p.c + ",1)"; ctx.shadowBlur = 9; ctx.fill();
+      }
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // anamorphic lens-flare streak: a glow disc scaled long on one axis, rotated.
+    function streak(cx, cy, ang, len, thick, rgb, alpha) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.translate(cx, cy); ctx.rotate(ang); ctx.scale(len, thick);
+      var g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, "rgba(" + rgb + "," + alpha + ")");
+      g.addColorStop(0.4, "rgba(" + rgb + "," + (alpha * 0.35) + ")");
+      g.addColorStop(1, "rgba(" + rgb + ",0)");
+      ctx.beginPath(); ctx.arc(0, 0, 1, 0, 7); ctx.fillStyle = g; ctx.fill();
+      ctx.restore();
+      ctx.globalCompositeOperation = "source-over";
+    }
+    function glowDisc(cx, cy, r, rgb, alpha) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, "rgba(" + rgb + "," + alpha + ")");
+      g.addColorStop(0.5, "rgba(" + rgb + "," + (alpha * 0.35) + ")");
+      g.addColorStop(1, "rgba(" + rgb + ",0)");
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = g; ctx.fill();
+      ctx.restore();
+      ctx.globalCompositeOperation = "source-over";
+    }
 
     // ── state ──
-    var phase = "seed";           // seed -> grow -> flood -> idle
+    var phase = "ignite";          // ignite -> grow -> flood -> idle
     var t0 = 0, pStart = 0;
     var mouse = { x: -9999, y: -9999 };
     var eyeHover = false;
     var floodBurst = false;
-    var revealed = false;         // login panel shown
+    var revealed = false;          // login panel shown
+    var unlockT = 0;               // iris unlock pulse start
     var badgeShown = false, hintShown = false;
     var lastSpawn = 0;
+
+    if (SKIPTO === "idle" || REDUCE) { phase = "idle"; badge.classList.add("show"); badgeShown = true; }
+    else if (SKIPTO === "flood") { phase = "flood"; }
+    if (HOLD === "grow") phase = "grow";
+    else if (HOLD === "flood") phase = "flood";
 
     window.addEventListener("mousemove", function (e) {
       mouse.x = e.clientX; mouse.y = e.clientY;
@@ -287,20 +368,20 @@
       }
     });
 
-    function eyeRadius() { return Math.max(26, fit().s * 1600 * 0.028); }
-
     function openGate() {
       if (revealed) return;
       revealed = true; eyeHover = false; canvas.style.cursor = "default";
+      unlockT = performance.now();
       var ep = toScreen(LOGIN_EYE);
-      // anchor panel near the eye, clamped to viewport
       var gx = Math.min(Math.max(ep.x, 180), W - 180);
-      var gy = Math.min(Math.max(ep.y + 96, 140), H - 120);
+      var gy = Math.min(Math.max(ep.y + 104, 150), H - 130);
       if (W < 560) { gx = W / 2; gy = H / 2; }
       gate.style.left = gx + "px";
       gate.style.top = gy + "px";
       gate.classList.add("open");
       hint.classList.remove("show");
+      var ec = toScreen(LOGIN_EYE);
+      spark(ec.x, ec.y, 16, 10, 2.6, 0.4);
       setTimeout(function () { pw.focus(); }, 120);
     }
 
@@ -310,7 +391,7 @@
       if (Math.hypot(e.clientX - ep.x, e.clientY - ep.y) < eyeRadius()) openGate();
     });
 
-    // ── login submit ──
+    // ── login submit (pipeline preserved verbatim) ──
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var code = pw.value.trim();
@@ -339,6 +420,22 @@
       pw.value = ""; pw.focus();
     }
 
+    // ── flood wavefront geometry: a glowing line sweeping muzzle -> bottom-left ──
+    function floodGeom(progress) {
+      var M = toScreen(MUZZLE);
+      var dx = 0 - M.x, dy = H - M.y;            // toward bottom-left corner
+      var dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+      var px = -dy, py = dx;                       // perpendicular (wavefront line dir)
+      var corners = [[0,0],[W,0],[W,H],[0,H]], lo = 1e9, hi = -1e9;
+      for (var i = 0; i < 4; i++) {
+        var pr = (corners[i][0]-M.x)*dx + (corners[i][1]-M.y)*dy;
+        if (pr < lo) lo = pr; if (pr > hi) hi = pr;
+      }
+      var margin = 60;
+      var wf = lo - margin + progress * (hi - lo + 2*margin);
+      return { M:M, dx:dx, dy:dy, px:px, py:py, wf:wf };
+    }
+
     // ── render loop ──
     function frame(ts) {
       requestAnimationFrame(frame);
@@ -350,141 +447,201 @@
       ctx.fillStyle = "#0d0e1a";
       ctx.fillRect(0, 0, W, H);
 
-      // SEED (0-600ms)
-      if (phase === "seed") {
-        var t = Math.min(elapsed / 600, 1);
-        var c = toScreen(SEED);
-        var r = 3 + easeOut(t) * 9;
-        var g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r * 3);
-        g.addColorStop(0, "rgba(255,240,255," + (0.7*t) + ")");
-        g.addColorStop(0.4, "rgba(122,212,232," + (0.4*t) + ")");
-        g.addColorStop(1, "rgba(122,212,232,0)");
-        ctx.beginPath(); ctx.arc(c.x, c.y, r*3, 0, 7); ctx.fillStyle = g; ctx.fill();
-        ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, 7);
-        ctx.fillStyle = "rgba(230,250,255," + (0.95*t) + ")";
-        ctx.shadowColor = "#7ad4e8"; ctx.shadowBlur = 24*t; ctx.fill(); ctx.shadowBlur = 0;
-        if (t >= 1) { phase = "grow"; pStart = ts; }
+      // ── IGNITE (0-500ms): black, muzzle spark + anamorphic flare + shockwave ──
+      if (phase === "ignite") {
+        var t = HOLD === "ignite" ? 0.5 : Math.min(elapsed / 500, 1);
+        var e = easeOut(t);
+        var m = toScreen(MUZZLE);
+        var gp = toScreen(GUN_GRIP);
+        var ang = Math.atan2(m.y - gp.y, m.x - gp.x);   // barrel axis (grip -> muzzle)
+        var rise = Math.sin(Math.min(t, 1) * Math.PI);   // 0..1..0
+        // anamorphic streak along barrel axis + cross flare
+        streak(m.x, m.y, ang, 260 * e, 6 + 4*rise, CY, 0.55 * rise);
+        streak(m.x, m.y, ang + Math.PI/2, 70 * e, 4, CYL, 0.35 * rise);
+        // core
+        glowDisc(m.x, m.y, 16 + 60*e, CY, 0.5 * rise);
+        glowDisc(m.x, m.y, 10 + 16*e, WH, 0.9 * rise);
+        // shockwave ring
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        var rr = e * Math.min(W, H) * 0.18;
+        ctx.beginPath(); ctx.arc(m.x, m.y, rr, 0, 7);
+        ctx.strokeStyle = "rgba(" + CY + "," + (0.5 * (1 - e)) + ")";
+        ctx.lineWidth = 2.5; ctx.shadowColor = "rgba(" + CY + ",0.8)"; ctx.shadowBlur = 12;
+        ctx.stroke(); ctx.shadowBlur = 0;
+        ctx.restore();
+        ctx.globalCompositeOperation = "source-over";
+        if (t > 0.4 && ts - lastSpawn > 60) { spark(m.x, m.y, 3, 8, 2.2, 0.6); lastSpawn = ts; }
+        if (t >= 1 && HOLD !== "ignite") { phase = "grow"; pStart = ts; }
       }
 
-      // GROW (600-3000ms)
+      // ── GROW (0-2100ms): tendrils stroke-reveal from muzzle along the figure ──
       if (phase === "grow") {
-        var tg = Math.min(elapsed / 2400, 1);
+        var tg = HOLD === "grow" ? 0.62 : Math.min(elapsed / 2100, 1);
         var pt = easeIO(tg);
-        var sc = toScreen(SEED);
-        var pulse = 0.3 + 0.15 * Math.sin(ts / 200);
-        ctx.beginPath(); ctx.arc(sc.x, sc.y, 5, 0, 7);
-        ctx.fillStyle = "rgba(200,240,255," + pulse + ")";
-        ctx.shadowColor = "#7ad4e8"; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
-        for (var i = 0; i < PATHS.length; i++) {
-          var P = PATHS[i];
-          var lt = Math.max(0, (pt - P.d) / (1 - P.d));
-          drawPath(P.p, easeOut(Math.min(lt * 1.3, 1)), P.c, P.w, 1);
+        var m2 = toScreen(MUZZLE);
+        // pulsing muzzle core
+        var pulse = 0.55 + 0.25 * Math.sin(ts / 160);
+        glowDisc(m2.x, m2.y, 26, CY, 0.45 * pulse);
+        glowDisc(m2.x, m2.y, 11, WH, 0.85 * pulse);
+        for (var i = 0; i < TENDRILS.length; i++) {
+          var T = TENDRILS[i];
+          var lt = Math.max(0, (pt - T.d) / (1 - T.d));
+          var prog = easeOut(Math.min(lt * 1.25, 1));
+          drawPath(T.p, prog, T.c, T.w, 1, function (tx, ty, rgb) {
+            if (Math.random() < 0.5) parts.push({
+              x: tx, y: ty, vx: (Math.random()-0.5)*1.2, vy: (Math.random()-0.5)*1.2 - 0.3,
+              r: 0.7 + Math.random()*1.4, a: 0.9, g: 0.02, c: rgb
+            });
+          });
         }
-        if (tg > 0.45 && ts - lastSpawn > 100) { spawn(sc.x, sc.y, false); lastSpawn = ts; }
-        if (tg >= 1) { phase = "flood"; pStart = ts; floodBurst = false; }
+        if (tg >= 1 && HOLD !== "grow") { phase = "flood"; pStart = ts; floodBurst = false; }
       }
 
-      // FLOOD (1400ms)
+      // ── FLOOD (0-1600ms): chromatic wavefront sweeps muzzle -> bottom-left ──
       if (phase === "flood") {
-        var ft = Math.min(elapsed / 1400, 1);
-        var fe = easeOut(ft);
+        var ft = HOLD === "flood" ? 0.5 : Math.min(elapsed / 1600, 1);
+        var fe = easeIO(ft);
+        var G = floodGeom(fe);
         if (imgReady) {
-          var sc2 = toScreen(SEED);
-          var maxR = Math.hypot(W, H) * 0.66;
-          ctx.save();
-          ctx.beginPath(); ctx.arc(sc2.x, sc2.y, fe * maxR, 0, 7); ctx.clip();
+          // reveal everything the wavefront has passed (proj <= wf): draw photo,
+          // then cover the not-yet-revealed half-plane with the dark backdrop.
           ctx.drawImage(img, f.dx, f.dy, f.dw, f.dh);
-          ctx.restore();
+          var B = (W + H) * 2;
+          var ox = G.M.x + G.dx * G.wf, oy = G.M.y + G.dy * G.wf; // point on wavefront line
+          var ax = ox + G.px * B, ay = oy + G.py * B;
+          var bx = ox - G.px * B, by = oy - G.py * B;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+          ctx.lineTo(bx + G.dx * B, by + G.dy * B);
+          ctx.lineTo(ax + G.dx * B, ay + G.dy * B);
+          ctx.closePath();
+          ctx.fillStyle = "#0d0e1a"; ctx.fill();
         }
-        var pa = (1 - easeOut(ft)) * 0.6;
-        if (pa > 0.02) for (var j = 0; j < PATHS.length; j++) drawPath(PATHS[j].p, 1, PATHS[j].c, PATHS[j].w, pa);
-        if (!floodBurst && ft > 0.05) { var sb = toScreen(SEED); spawn(sb.x, sb.y, true); floodBurst = true; }
-        if (ft >= 1) { phase = "idle"; pStart = ts; if (!badgeShown) { badge.classList.add("show"); badgeShown = true; } }
+        // fading tendrils trailing the front
+        var pa = (1 - fe) * 0.7;
+        if (pa > 0.02) for (var j = 0; j < TENDRILS.length; j++) drawPath(TENDRILS[j].p, 1, TENDRILS[j].c, TENDRILS[j].w, pa);
+        // chromatic-aberration wavefront line + leading glow
+        var oX = G.M.x + G.dx * G.wf, oY = G.M.y + G.dy * G.wf;
+        var L = (W + H);
+        function wfLine(off, rgb, lw, al) {
+          ctx.save(); ctx.globalCompositeOperation = "lighter";
+          ctx.beginPath();
+          ctx.moveTo(oX + G.px*L + G.dx*off, oY + G.py*L + G.dy*off);
+          ctx.lineTo(oX - G.px*L + G.dx*off, oY - G.py*L + G.dy*off);
+          ctx.strokeStyle = "rgba(" + rgb + "," + al + ")"; ctx.lineWidth = lw;
+          ctx.shadowColor = "rgba(" + rgb + ",0.9)"; ctx.shadowBlur = 16; ctx.stroke();
+          ctx.restore(); ctx.globalCompositeOperation = "source-over";
+        }
+        var edge = Math.sin(Math.min(ft,1) * Math.PI);  // brightest mid-sweep
+        wfLine(7, MG, 2.4, 0.55 * edge);    // magenta leads
+        wfLine(-7, CY, 2.4, 0.55 * edge);   // cyan trails
+        wfLine(0, WH, 2.0, 0.8 * edge);     // white core
+        if (!floodBurst && ft > 0.04) { spark(G.M.x, G.M.y, 18, 14, 2.8, 0.5); floodBurst = true; }
+        if (ft > 0.85 && ts - lastSpawn > 50) { spark(G.M.x, G.M.y, 4, 12, 2.0, 0.7); lastSpawn = ts; }
+        if (ft >= 1 && HOLD !== "flood") { phase = "idle"; pStart = ts; if (!badgeShown) { badge.classList.add("show"); badgeShown = true; } }
       }
 
-      // IDLE (loop)
+      // ── IDLE (loop) ──
       if (phase === "idle") {
         if (imgReady) ctx.drawImage(img, f.dx, f.dy, f.dw, f.dh);
+        else { ctx.fillStyle = "#11131f"; ctx.fillRect(0,0,W,H); }
 
         // vignette
-        var vig = ctx.createRadialGradient(W/2, H/2, H*0.28, W/2, H/2, H*0.95);
+        var vig = ctx.createRadialGradient(W/2, H/2, H*0.28, W/2, H/2, H*0.98);
         vig.addColorStop(0, "rgba(0,0,0,0)");
-        vig.addColorStop(1, "rgba(8,4,20,0.55)");
+        vig.addColorStop(1, "rgba(6,4,16,0.6)");
         ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
 
         var tsec = ts / 1000;
-        // animated hair wisps
-        for (var h = 0; h < HAIR_IDLE.length; h++) {
-          var hr = HAIR_IDLE[h];
-          var wo1 = Math.sin(tsec * 0.85 + hr.ph) * hr.amp;
-          var wo2 = Math.sin(tsec * 0.65 + hr.ph + 1.1) * hr.amp * 0.7;
-          var pp = hr.p.slice();
-          pp[2] += wo1; pp[3] += wo2; pp[4] += wo2; pp[5] += wo1;
-          drawPath(pp, 1, "122,212,232", 1.8, 0.22);
+        var mz = toScreen(MUZZLE);
+
+        if (!REDUCE) {
+          // heat-haze / smoke glow at the muzzle (gun still "smoking")
+          var haze = 0.10 + 0.05 * Math.sin(tsec * 1.3);
+          glowDisc(mz.x, mz.y - 4, 34 + 6*Math.sin(tsec*0.9), EM, haze);
+          glowDisc(mz.x, mz.y, 18, CY, 0.06 + 0.03*Math.sin(tsec*1.7));
+          if (ts - lastSpawn > 280) { ember(mz.x, mz.y); lastSpawn = ts; }
+
+          // subtle braid/hair wisps swaying
+          for (var hI = 0; hI < WISPS.length; hI++) {
+            var hr = WISPS[hI];
+            var wo1 = Math.sin(tsec * 0.8 + hr.ph) * hr.amp;
+            var wo2 = Math.sin(tsec * 0.6 + hr.ph + 1.1) * hr.amp * 0.7;
+            var pp = hr.p.slice();
+            pp[2] += wo1; pp[3] += wo2; pp[4] += wo2; pp[5] += wo1;
+            drawPath(pp, 1, CY, 1.4, 0.12);
+          }
         }
 
-        // eye tracking (both eyes)
+        // both eyes — parallax highlight follows mouse
         var eyes = [LOGIN_EYE, OTHER_EYE];
         for (var e2 = 0; e2 < 2; e2++) {
           var ec = toScreen(eyes[e2]);
           var dist = Math.hypot(mouse.x - ec.x, mouse.y - ec.y);
-          var ang = Math.atan2(mouse.y - ec.y, mouse.x - ec.x);
-          var off = Math.min(dist / 180, 1) * 4.5;
-          var ex = ec.x + Math.cos(ang) * off, ey = ec.y + Math.sin(ang) * off;
-          var ig = ctx.createRadialGradient(ec.x, ec.y, 0, ec.x, ec.y, 14);
-          ig.addColorStop(0, "rgba(122,212,232,0.20)");
-          ig.addColorStop(1, "rgba(122,212,232,0)");
-          ctx.beginPath(); ctx.arc(ec.x, ec.y, 14, 0, 7); ctx.fillStyle = ig; ctx.fill();
-          ctx.beginPath(); ctx.arc(ex, ey, 4, 0, 7); ctx.fillStyle = "rgba(8,8,24,0.45)"; ctx.fill();
-          ctx.beginPath(); ctx.arc(ex - 1.4, ey - 1.4, 1.3, 0, 7); ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.fill();
+          var aang = Math.atan2(mouse.y - ec.y, mouse.x - ec.x);
+          var off = Math.min(dist / 200, 1) * 4.5;
+          var ex = ec.x + Math.cos(aang) * off, ey = ec.y + Math.sin(aang) * off;
+          glowDisc(ec.x, ec.y, 13, CY, 0.16);
+          ctx.beginPath(); ctx.arc(ex - 1.4, ey - 1.4, 1.3, 0, 7);
+          ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.fill();
         }
 
-        // login-eye keyhole pulse
+        // login-eye keyhole "breathing" iris pulse
         if (!revealed) {
           var le = toScreen(LOGIN_EYE);
-          var mag = eyeHover ? 0.24 + 0.08*Math.sin(ts/300) : 0.08 + 0.05*Math.sin(ts/900);
-          var kr = eyeHover ? 30 : 20;
-          var kg = ctx.createRadialGradient(le.x, le.y, 0, le.x, le.y, kr);
-          kg.addColorStop(0, "rgba(122,212,232," + mag + ")");
-          kg.addColorStop(0.5, "rgba(122,212,232," + (mag*0.4) + ")");
-          kg.addColorStop(1, "rgba(122,212,232,0)");
-          ctx.beginPath(); ctx.arc(le.x, le.y, kr, 0, 7); ctx.fillStyle = kg; ctx.fill();
+          var mag = eyeHover ? 0.30 + 0.10*Math.sin(ts/260) : 0.10 + 0.06*Math.sin(ts/950);
+          var kr = eyeHover ? 34 : 22;
+          glowDisc(le.x, le.y, kr, CY, mag);
+          if (Math.sin(ts/950) > 0.6 || eyeHover) glowDisc(le.x, le.y, kr*0.6, MG, mag*0.5);
           if (eyeHover) {
-            ctx.beginPath(); ctx.arc(le.x, le.y, kr*0.5, 0, 7);
-            ctx.strokeStyle = "rgba(122,212,232,0.5)"; ctx.lineWidth = 1; ctx.stroke();
+            ctx.save(); ctx.globalCompositeOperation = "lighter";
+            ctx.beginPath(); ctx.arc(le.x, le.y, kr*0.55, 0, 7);
+            ctx.strokeStyle = "rgba(" + CY + ",0.6)"; ctx.lineWidth = 1.2;
+            ctx.shadowColor = "rgba(" + CY + ",0.8)"; ctx.shadowBlur = 8; ctx.stroke();
+            ctx.restore(); ctx.globalCompositeOperation = "source-over";
           }
         }
 
-        if (ts - lastSpawn > 460) {
-          spawn(f.dx + (0.15 + Math.random()*0.7)*f.dw, f.dy + (0.05 + Math.random()*0.75)*f.dh, false);
-          lastSpawn = ts;
+        // iris unlock pulse — expanding rings on click
+        if (unlockT) {
+          var ut = (ts - unlockT) / 700;
+          if (ut <= 1) {
+            var le2 = toScreen(LOGIN_EYE);
+            ctx.save(); ctx.globalCompositeOperation = "lighter";
+            for (var ri = 0; ri < 2; ri++) {
+              var rt = ut - ri * 0.18; if (rt < 0) continue;
+              var rad = easeOut(Math.min(rt,1)) * eyeRadius() * 2.6;
+              ctx.beginPath(); ctx.arc(le2.x, le2.y, rad, 0, 7);
+              ctx.strokeStyle = "rgba(" + (ri ? MG : CY) + "," + (0.6*(1-rt)) + ")";
+              ctx.lineWidth = 2.2; ctx.shadowColor = "rgba(" + CY + ",0.8)"; ctx.shadowBlur = 12;
+              ctx.stroke();
+            }
+            ctx.shadowBlur = 0; ctx.restore(); ctx.globalCompositeOperation = "source-over";
+          } else unlockT = 0;
         }
 
-        if (!hintShown && ts - t0 > 4200) { hint.classList.add("show"); hintShown = true; }
+        if (!hintShown && ts - t0 > (SKIPTO === "idle" ? 600 : 4200)) { hint.classList.add("show"); hintShown = true; }
       }
 
-      // particles (all phases)
-      for (var k = parts.length - 1; k >= 0; k--) {
-        var p = parts[k];
-        p.x += p.vx; p.y += p.vy; p.vy += 0.02; p.a -= 0.009;
-        if (p.a <= 0) { parts.splice(k, 1); continue; }
-        ctx.globalAlpha = p.a;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7);
-        ctx.fillStyle = "rgba(" + p.c + ",1)";
-        ctx.shadowColor = "rgba(" + p.c + ",1)"; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
-      }
-      ctx.globalAlpha = 1;
+      // particles for every phase
+      drawParts();
       window.__phase = phase;
 
-      // DEBUG: mark eye/seed positions for calibration
-      if (DEBUG && phase === "idle") {
-        [["LOGIN", LOGIN_EYE, "#e87fa0"], ["OTHER", OTHER_EYE, "#7ad4e8"], ["SEED", SEED, "#ffffff"]].forEach(function (m) {
-          var s = toScreen(m[1]);
-          ctx.strokeStyle = m[2]; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.moveTo(s.x-12, s.y); ctx.lineTo(s.x+12, s.y);
-          ctx.moveTo(s.x, s.y-12); ctx.lineTo(s.x, s.y+12); ctx.stroke();
-          ctx.beginPath(); ctx.arc(s.x, s.y, eyeRadius(), 0, 7); ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1;
-          ctx.fillStyle = m[2]; ctx.font = "10px monospace"; ctx.fillText(m[0] + " " + m[1].x + "," + m[1].y, s.x + 14, s.y - 6);
+      // DEBUG calibration overlay
+      if (DEBUG && (phase === "idle" || SKIPTO)) {
+        [["LOGIN", LOGIN_EYE, "#e87fa0"], ["OTHER", OTHER_EYE, "#7ad4e8"],
+         ["MUZZLE", MUZZLE, "#ffffff"], ["GRIP", GUN_GRIP, "#ffd27a"], ["CYL", GUN_CYL, "#a8ecf7"]].forEach(function (mk) {
+          var s = toScreen(mk[1]);
+          ctx.strokeStyle = mk[2]; ctx.lineWidth = 1.5; ctx.globalAlpha = 1;
+          ctx.beginPath(); ctx.moveTo(s.x-13, s.y); ctx.lineTo(s.x+13, s.y);
+          ctx.moveTo(s.x, s.y-13); ctx.lineTo(s.x, s.y+13); ctx.stroke();
+          if (mk[0] === "LOGIN") {
+            ctx.beginPath(); ctx.arc(s.x, s.y, eyeRadius(), 0, 7);
+            ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1;
+          }
+          ctx.fillStyle = mk[2]; ctx.font = "10px monospace";
+          ctx.fillText(mk[0] + " " + mk[1].x + "," + mk[1].y, s.x + 15, s.y - 7);
         });
       }
     }
