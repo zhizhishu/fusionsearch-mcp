@@ -869,6 +869,21 @@ input:focus, select:focus, textarea:focus {
   font-size: 11px !important;
 }
 
+.hf-ready {
+  margin: -2px 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in oklch, var(--primary) 55%, var(--muted-foreground));
+  font-size: 12px;
+}
+
+.hf-ready::before {
+  content: "✓";
+  font-weight: 700;
+  color: var(--primary);
+}
+
 /* ——————————————————————————————————————————————
    监控
    —————————————————————————————————————————————— */

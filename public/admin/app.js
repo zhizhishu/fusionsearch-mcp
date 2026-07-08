@@ -300,6 +300,23 @@ function renderKeyStatus(items = []) {
   bindKeyReveal();
 }
 
+// When the Space already has HF_WRITE_TOKEN + Space ID, the one-time-token inputs are
+// pure noise — hide them and show a calm "ready" line instead. Only surface an input
+// when write-back couldn't otherwise happen.
+function applyHfTokenVisibility(canWrite) {
+  const pairs = [
+    ['keysHfTokenField', 'keysHfReady'],
+    ['securityHfTokenField', 'securityHfReady'],
+    ['grokHfTokenField', 'grokHfReady']
+  ];
+  for (const [fieldId, readyId] of pairs) {
+    const field = document.getElementById(fieldId);
+    const ready = document.getElementById(readyId);
+    if (field) field.hidden = Boolean(canWrite);
+    if (ready) ready.hidden = !canWrite;
+  }
+}
+
 function formatKeySource(item) {
   const source = item.source || 'missing';
   if (source === 'runtime') return 'runtime config';
@@ -491,6 +508,7 @@ async function loadConfig() {
   fields.keyState.textContent = config.hasSearchShApiKey ? '已配置' : '未配置';
   fields.fusionKeyState.textContent = formatFusionKeyState(config.fusion);
   renderKeyStatus(config.keyStatus || []);
+  applyHfTokenVisibility(config.hfSecrets?.canWrite);
   if (fields.adminAuthState) {
     fields.adminAuthState.textContent = config.auth?.adminAuthEnabled ? '已启用' : '未启用';
   }

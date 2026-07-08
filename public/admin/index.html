@@ -203,17 +203,18 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
                 <h2>密钥中心</h2>
               </div>
-              <p class="panel-note">所有密钥的查看、修改、持久化都收在这一处。👁 看当前生效明文；下方输入框填新值即替换（留空则不改）；保存默认写回 Hugging Face Secrets，Space 重启也不丢。仅登录管理员可见，明文不写日志。</p>
+              <p class="panel-note">查看 · 修改 · 持久化都在这里。👁 看明文，输入框填新值即替换（留空不改）；保存默认写回 HF Secrets，重启不丢。明文仅管理员可见、不写日志。</p>
               <div class="key-status-grid" id="keyStatusGrid"></div>
               <label class="check-row" id="keysWriteHfRow">
                 <input id="keysWriteHf" type="checkbox" checked />
                 <span>保存时写回 Hugging Face Secrets（重启后仍生效）</span>
               </label>
-              <label class="field">
+              <label class="field" id="keysHfTokenField">
                 <span>一次性 HF Write Token</span>
-                <input id="keysHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
+                <input id="keysHfToken" type="password" autocomplete="new-password" placeholder="Space 未配置写回令牌时临时粘贴" />
                 <small>只用于本次写回；完整 Token 不回显、不写日志。</small>
               </label>
+              <p class="hf-ready" id="keysHfReady" hidden>写回令牌已就绪 · 保存即写回 HF</p>
               <div class="test-row">
                 <button class="primary-button" id="saveKeys" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
@@ -259,11 +260,12 @@
                 <input id="syncGrokHfSecrets" type="checkbox" checked />
                 <span>保存时同步 `GROK_MODEL` 到 Hugging Face Secrets，防止 Space 重启恢复旧模型</span>
               </label>
-              <label class="field span-2">
+              <label class="field span-2" id="grokHfTokenField">
                 <span>一次性 HF Write Token</span>
-                <input id="grokHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
+                <input id="grokHfToken" type="password" autocomplete="new-password" placeholder="Space 未配置写回令牌时临时粘贴" />
                 <small>只用于本次保存；完整 Token 不回显、不写日志。</small>
               </label>
+              <p class="hf-ready span-2" id="grokHfReady" hidden>写回令牌已就绪 · 保存模型即写回 HF</p>
               <div class="test-row">
                 <button class="soft-button" id="listGrokModels">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -421,10 +423,11 @@
                 <input id="syncSecurityHfSecrets" type="checkbox" checked />
                 <span>同步写回 Hugging Face Secrets（重启后仍生效）</span>
               </label>
-              <label class="field">
+              <label class="field" id="securityHfTokenField">
                 <span>一次性 HF Write Token</span>
-                <input id="securityHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
+                <input id="securityHfToken" type="password" autocomplete="new-password" placeholder="Space 未配置写回令牌时临时粘贴" />
               </label>
+              <p class="hf-ready" id="securityHfReady" hidden>写回令牌已就绪 · 无需手填</p>
               <div class="test-row">
                 <button class="primary-button" id="rotateSession" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
@@ -581,7 +584,7 @@
     <div class="save-bar">
       <div>
         <strong>运行配置</strong>
-        <span id="saveHint">改完记得点保存，不然 Space 一重启就白忙活啦</span>
+        <span id="saveHint">服务网址 · 模型 · 搜索参数改完点保存。密钥在「密钥中心」单独保存。</span>
       </div>
       <button class="primary-button" id="saveConfig">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
