@@ -262,20 +262,75 @@ function clearHfSecretInputs() {
   });
 }
 
+let revealedEnvCache = null;
+
+// Fetch the live process.env once per render so eye-toggles show real values without
+// re-hitting the server on every click. Reset whenever the key list re-renders.
+async function ensureRevealEnv() {
+  if (revealedEnvCache) return revealedEnvCache;
+  const payload = await requestJson('/api/admin/env-reveal');
+  revealedEnvCache = payload?.env || {};
+  return revealedEnvCache;
+}
+
+// One delegated listener on the grid; survives innerHTML re-renders of the cards.
+function bindKeyReveal() {
+  if (!fields.keyStatusGrid || fields.keyStatusGrid.dataset.revealBound) return;
+  fields.keyStatusGrid.dataset.revealBound = '1';
+  fields.keyStatusGrid.addEventListener('click', async (event) => {
+    const btn = event.target.closest('.key-eye');
+    if (!btn) return;
+    const card = btn.closest('.key-status-card');
+    const code = card?.querySelector('code');
+    if (!code) return;
+    const envName = card.dataset.env || '';
+    if (card.classList.contains('revealed')) {
+      code.textContent = code.dataset.masked || '未设置';
+      card.classList.remove('revealed');
+      btn.textContent = '👁';
+      btn.setAttribute('aria-label', '显示明文');
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const env = await ensureRevealEnv();
+      const value = env[envName];
+      code.textContent = (value === undefined || value === '')
+        ? '（进程环境里没取到，可能只存在 runtime 配置里）'
+        : value;
+      card.classList.add('revealed');
+      btn.textContent = '🙈';
+      btn.setAttribute('aria-label', '隐藏明文');
+    } catch (error) {
+      code.textContent = `读取明文失败：${error?.message || error}`;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 function renderKeyStatus(items = []) {
   if (!fields.keyStatusGrid) return;
+  revealedEnvCache = null;
   fields.keyStatusGrid.innerHTML = items.length
-    ? items.map((item) => `
-      <article class="key-status-card ${item.configured ? 'configured' : 'missing'}">
+    ? items.map((item) => {
+      const envName = /^[A-Z][A-Z0-9_]+$/.test(item.source || '') ? item.source : '';
+      const masked = item.masked || '未设置';
+      const eye = envName && item.configured
+        ? `<button type="button" class="key-eye" aria-label="显示明文" title="显示 / 隐藏明文">👁</button>`
+        : '';
+      return `
+      <article class="key-status-card ${item.configured ? 'configured' : 'missing'}" data-env="${escapeHtml(envName)}">
         <div>
           <span>${escapeHtml(item.label)}</span>
-          <strong>${item.configured ? '已配置' : '未配置'}</strong>
+          <div class="key-actions"><strong>${item.configured ? '已配置' : '未配置'}</strong>${eye}</div>
         </div>
-        <code>${escapeHtml(item.masked || '未设置')}</code>
+        <code data-masked="${escapeHtml(masked)}">${escapeHtml(masked)}</code>
         <small>${escapeHtml(formatKeySource(item))}</small>
-      </article>
-    `).join('')
+      </article>`;
+    }).join('')
     : '<div class="empty-note">暂无 Key 状态</div>';
+  bindKeyReveal();
 }
 
 function formatKeySource(item) {

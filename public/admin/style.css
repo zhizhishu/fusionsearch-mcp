@@ -772,6 +772,43 @@ input:focus, select:focus, textarea:focus {
   font: 12px/1.5 var(--font-mono);
 }
 
+.key-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.key-eye {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--card);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.key-eye:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-tint);
+}
+
+.key-eye:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.key-status-card.revealed code {
+  color: color-mix(in oklch, var(--foreground) 92%, black);
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--accent-line);
+  background: var(--card);
+  user-select: all;
+}
+
 /* ——————————————————————————————————————————————
    监控
    —————————————————————————————————————————————— */

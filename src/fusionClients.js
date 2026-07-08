@@ -131,11 +131,12 @@ export async function executeGrokWebSearch({
     messages: [
       { role: 'system', content: resolved.grokSystemPrompt },
       { role: 'user', content: prompt }
-    ],
-    stream: false
+    ]
   };
 
-  const data = await postJson(`${trimSlash(resolved.grokApiUrl)}/chat/completions`, {
+  // Grok 合成默认走流式：token 持续回流，连接不空闲，绕开中转代理 ~60s 空闲掐断长思考请求。
+  // 流式握手 / 解析失败或服务端不支持 SSE 时，自动降级为一次性非流式请求，结果与旧版一致。
+  const data = await postChatWithStreamFallback(`${trimSlash(resolved.grokApiUrl)}/chat/completions`, {
     headers: authHeaders(resolved.grokApiKey),
     body: payload,
     timeoutMs
@@ -690,6 +691,91 @@ async function requestJson(url, { method, headers, body, timeoutMs = DEFAULT_TIM
     throw error;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+// Grok/OpenAI-compatible chat: stream-first, then fall back to one non-streaming call.
+// Returns a payload shaped like a normal chat-completion so extractChatContent stays unchanged.
+async function postChatWithStreamFallback(url, { headers, body, timeoutMs }) {
+  try {
+    return await postChatStream(url, { headers, body, timeoutMs });
+  } catch {
+    return postJson(url, { headers, body: { ...body, stream: false }, timeoutMs });
+  }
+}
+
+async function postChatStream(url, { headers, body, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  const controller = new AbortController();
+  // Idle timeout: abort only if no bytes arrive for timeoutMs, so a long-but-active stream
+  // is allowed to finish while a genuinely stalled connection still gives up and falls back.
+  let idleTimer;
+  const armIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => controller.abort(), timeoutMs);
+  };
+  armIdle();
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { ...headers, Accept: 'text/event-stream' },
+      body: JSON.stringify({ ...body, stream: true }),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      const error = new Error(`POST ${url} 响应 ${response.status} ${response.statusText}`);
+      error.status = response.status;
+      error.body = text.slice(0, 1200);
+      throw error;
+    }
+    const contentType = response.headers.get('content-type') || '';
+    // Server ignored stream=true and returned a normal JSON body → use it directly.
+    if (!response.body || !contentType.includes('event-stream')) {
+      const text = await response.text();
+      return text ? JSON.parse(text) : {};
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let content = '';
+    let finishReason = '';
+    const consume = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) return;
+      const dataStr = trimmed.slice(5).trim();
+      if (!dataStr || dataStr === '[DONE]') return;
+      let chunk;
+      try {
+        chunk = JSON.parse(dataStr);
+      } catch {
+        return;
+      }
+      const choice = Array.isArray(chunk?.choices) ? chunk.choices[0] : null;
+      const piece = choice?.delta?.content ?? choice?.message?.content ?? '';
+      if (piece) content += piece;
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      armIdle();
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        consume(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + 1);
+      }
+    }
+    if (buffer) consume(buffer);
+    if (!content) throw new Error('流式响应为空');
+    return { choices: [{ message: { role: 'assistant', content }, finish_reason: finishReason }] };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('流式请求空闲超时');
+    }
+    throw error;
+  } finally {
+    clearTimeout(idleTimer);
   }
 }
 

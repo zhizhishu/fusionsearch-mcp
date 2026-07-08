@@ -1663,99 +1663,6 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
   }
 
   if (includeFusion) {
-    const webSearchShape = {
-      query: z.string().trim().min(1, '搜索关键词不能为空').describe('自然语言搜索问题'),
-      platform: z.string().describe('聚焦平台，例如 GitHub / Reddit / 官方文档').optional(),
-      model: z.string().describe('可选 Grok 模型 ID，不填使用默认模型').optional(),
-      extraSources: z.number().int().min(0).max(10).describe('额外从 Tavily/Firecrawl 补充的信源数量').optional(),
-      timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
-    };
-    const webSearchSchema = z.object(webSearchShape);
-    server.registerTool(
-      'web_search',
-      {
-        title: 'Web Search (Grok)',
-        description: '推荐工具：使用 Grok/OpenAI-compatible 执行 AI 搜索/回答，按 Grok System Prompt 输出',
-        inputSchema: webSearchShape
-      },
-      async (input) => {
-        const parsed = await webSearchSchema.parseAsync(input);
-        const sessionId = newSessionId();
-        try {
-          const result = await executeGrokWebSearch({
-            config,
-            query: parsed.query,
-            platform: parsed.platform,
-            model: parsed.model,
-            extraSources: parsed.extraSources ?? 0,
-            timeoutMs: parsed.timeoutMs
-          });
-          monitoring?.record('grok', {
-            ok: true,
-            message: 'web_search 调用成功',
-            source: 'mcp-tool'
-          });
-          sourceCache.set(sessionId, result.sources);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: [
-                  `# Web Search: ${parsed.query}`,
-                  `模型: ${result.model}`,
-                  `session_id: ${sessionId}`,
-                  `信源数量: ${result.sourcesCount}`,
-                  '',
-                  result.content || '未返回内容'
-                ].join('\n')
-              }
-            ]
-          };
-        } catch (error) {
-          monitoring?.record('grok', {
-            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
-            message: error instanceof Error ? error.message : String(error),
-            source: 'mcp-tool'
-          });
-          sourceCache.set(sessionId, []);
-          return buildErrorResponse({ query: parsed.query, error });
-        }
-      }
-    );
-
-    const fetchShape = {
-      url: z.string().trim().url().describe('要抓取正文的 HTTP/HTTPS URL'),
-      timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
-    };
-    const fetchSchema = z.object(fetchShape);
-    server.registerTool(
-      'web_fetch',
-      {
-        title: 'Web Fetch (Tavily -> Firecrawl)',
-        description: '推荐工具：通过 Tavily Extract 抓取正文，失败或空内容时自动降级到 Firecrawl Scrape',
-        inputSchema: fetchShape
-      },
-      async (input) => {
-        const { url, timeoutMs } = await fetchSchema.parseAsync(input);
-        try {
-          const result = await executeTavilyFetch({ config, url, timeoutMs });
-          monitoring?.record(result.provider === 'firecrawl' ? 'firecrawl' : 'tavily', {
-            ok: true,
-            message: `web_fetch 调用成功：${result.provider}`,
-            source: 'mcp-tool'
-          });
-          return { content: [{ type: 'text', text: `# Web Fetch\nProvider: ${result.provider}\nURL: ${url}\n\n${result.content}` }] };
-        } catch (error) {
-          monitoring?.record('tavily', {
-            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
-            message: error instanceof Error ? error.message : String(error),
-            source: 'mcp-tool'
-          });
-          return buildErrorResponse({ query: url, error });
-        }
-      }
-    );
-
     const mapShape = {
       url: z.string().trim().url().describe('起始 URL'),
       instructions: z.string().trim().describe('自然语言过滤指令').optional(),
@@ -1789,127 +1696,6 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
             source: 'mcp-tool'
           });
           return buildErrorResponse({ query: parsed.url, error });
-        }
-      }
-    );
-
-    const researchShape = {
-      query: z.string().trim().min(1, '研究问题不能为空').describe('需要多源检索并总结的问题'),
-      model: z.string().trim().describe('可选 Grok 模型 ID').optional(),
-      limit: z.number().int().min(1).max(10).describe('每个源最多采用的结果数量，默认 5').optional(),
-      extraSources: z.number().int().min(0).max(10).describe('额外 Tavily/Firecrawl 信源数量').optional(),
-      timeoutMs: z.number().int().min(5000).max(120000).describe('Grok 请求超时毫秒数').optional()
-    };
-    const researchSchema = z.object(researchShape);
-    server.registerTool(
-      'fusion_research',
-      {
-        title: 'Fusion Research',
-        description: '推荐工具：LibreSearch + Search-2api/search.sh 取证，再交给 Grok 按 System Prompt 总结',
-        inputSchema: researchShape
-      },
-      async (input) => {
-        const parsed = await researchSchema.parseAsync(input);
-        const limit = parsed.limit ?? 5;
-        const evidence = [];
-        const sourceList = [];
-
-        try {
-          const { payload, params } = await executeSearch({
-            endpoint: config.searchEndpoint,
-            defaultParams: config.defaultParams,
-            query: parsed.query,
-            overrides: {}
-          });
-          evidence.push(formatLibreEvidence({ query: parsed.query, payload, params, limit }));
-          sourceList.push(...getLibreResultItems(payload, limit).map((item) => ({ ...item, provider: 'libresearch' })));
-        } catch (error) {
-          evidence.push(`## LibreSearch\n失败: ${error instanceof Error ? error.message : String(error)}`);
-          monitoring?.record('libresearch', {
-            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
-            message: error instanceof Error ? error.message : String(error),
-            source: 'mcp-tool'
-          });
-        }
-
-        try {
-          const search2api = await callSearch2Api(config, {
-            prompt: parsed.query,
-            timeoutMs: Math.min(parsed.timeoutMs ?? 60_000, 90_000)
-          });
-          evidence.push(`## Search-2api/search.sh\n${search2api.content}`);
-        } catch (error) {
-          evidence.push(`## Search-2api/search.sh\n失败: ${error instanceof Error ? error.message : String(error)}`);
-          monitoring?.record('search2api', {
-            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
-            message: error instanceof Error ? error.message : String(error),
-            source: 'mcp-tool'
-          });
-        }
-
-        const prompt = [
-          `User question: ${parsed.query}`,
-          '',
-          'Use the following FusionSearch evidence. If evidence is weak, say so explicitly.',
-          evidence.join('\n\n---\n\n')
-        ].join('\n');
-
-        const sessionId = newSessionId();
-        try {
-          const result = await executeGrokWebSearch({
-            config,
-            query: prompt,
-            model: parsed.model,
-            extraSources: parsed.extraSources ?? 0,
-            timeoutMs: parsed.timeoutMs
-          });
-          monitoring?.record('grok', {
-            ok: true,
-            message: 'fusion_research Grok 汇总成功',
-            source: 'mcp-tool'
-          });
-          const sources = mergeSources(sourceList, result.sources);
-          sourceCache.set(sessionId, sources);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: [
-                  `# Fusion Research: ${parsed.query}`,
-                  `模型: ${result.model}`,
-                  `session_id: ${sessionId}`,
-                  `信源数量: ${sources.length}`,
-                  '',
-                  result.content || '未返回内容',
-                  '',
-                  '## 证据摘要',
-                  evidence.join('\n\n---\n\n')
-                ].join('\n')
-              }
-            ]
-          };
-        } catch (error) {
-          monitoring?.record('grok', {
-            status: isNotConfiguredErrorMessage(error) ? 'paused' : 'down',
-            message: error instanceof Error ? error.message : String(error),
-            source: 'mcp-tool'
-          });
-          sourceCache.set(sessionId, sourceList);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: [
-                  `# Fusion Research: ${parsed.query}`,
-                  `Grok 总结失败: ${error instanceof Error ? error.message : String(error)}`,
-                  `session_id: ${sessionId}`,
-                  '',
-                  '## 已取得的证据',
-                  evidence.join('\n\n---\n\n')
-                ].join('\n')
-              }
-            ]
-          };
         }
       }
     );
@@ -2048,166 +1834,12 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
 }
 
 function createFusionSearchTools(server, config, sourceCache, persistConfig) {
-  const grokSearchShape = {
-    query: z.string().trim().min(1, '搜索关键词不能为空').describe('自然语言搜索问题'),
-    platform: z.string().describe('聚焦平台，例如 GitHub / Reddit / 官方文档').optional(),
-    model: z.string().describe('可选 Grok 模型 ID，不填使用默认模型').optional(),
-    extraSources: z.number().int().min(0).max(10).describe('额外从 Tavily/Firecrawl 补充的信源数量').optional(),
-    timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
-  };
-  const grokSearchSchema = z.object(grokSearchShape);
-
-  server.registerTool(
-    'fusionsearch_grok_search',
-    {
-      title: 'FusionSearch Grok 搜索',
-      description: '通过 Grok/OpenAI-compatible 接口执行 AI 搜索，并缓存信源供 fusionsearch_sources 读取',
-      inputSchema: grokSearchShape
-    },
-    async (input) => {
-      const parsed = await grokSearchSchema.parseAsync(input);
-      const sessionId = newSessionId();
-      try {
-        const result = await executeGrokWebSearch({
-          config,
-          query: parsed.query,
-          platform: parsed.platform,
-          model: parsed.model,
-          extraSources: parsed.extraSources ?? 0,
-          timeoutMs: parsed.timeoutMs
-        });
-        sourceCache.set(sessionId, result.sources);
-
-        const lines = [
-          `# FusionSearch: ${parsed.query}`,
-          `模型: ${result.model}`,
-          `session_id: ${sessionId}`,
-          `信源数量: ${result.sourcesCount}`,
-          '',
-          result.content || '未返回内容'
-        ];
-        if (result.sources.length > 0) {
-          lines.push('', '## 信源预览');
-          result.sources.slice(0, 8).forEach((source, index) => {
-            lines.push(`- (${index + 1}) ${source.title || source.url}`);
-            lines.push(`  链接: ${source.url}`);
-            if (source.description) lines.push(`  摘要: ${source.description}`);
-            if (source.provider) lines.push(`  来源: ${source.provider}`);
-          });
-        }
-
-        return { content: [{ type: 'text', text: lines.join('\n') }] };
-      } catch (error) {
-        sourceCache.set(sessionId, []);
-        return buildErrorResponse({ query: parsed.query, error });
-      }
-    }
-  );
-
-  const sourcesShape = {
-    sessionId: z.string().trim().min(1).describe('fusionsearch_grok_search 返回的 session_id')
-  };
-  const sourcesSchema = z.object(sourcesShape);
-  server.registerTool(
-    'fusionsearch_sources',
-    {
-      title: 'FusionSearch 信源读取',
-      description: '根据 session_id 获取 Grok/Tavily/Firecrawl 缓存信源',
-      inputSchema: sourcesShape
-    },
-    async (input) => {
-      const { sessionId } = await sourcesSchema.parseAsync(input);
-      const sources = sourceCache.get(sessionId);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                session_id: sessionId,
-                sources_count: sources?.length ?? 0,
-                sources: sources ?? [],
-                error: sources ? undefined : 'session_id_not_found_or_expired'
-              },
-              null,
-              2
-            )
-          }
-        ]
-      };
-    }
-  );
-
-  const fetchShape = {
-    url: z.string().trim().url().describe('要抓取正文的 HTTP/HTTPS URL'),
-    timeoutMs: z.number().int().min(5000).max(120000).describe('请求超时毫秒数').optional()
-  };
-  const fetchSchema = z.object(fetchShape);
-  server.registerTool(
-    'fusionsearch_fetch',
-    {
-      title: 'FusionSearch 网页抓取',
-      description: '通过 Tavily Extract 抓取 Markdown 正文，失败时自动降级到 Firecrawl Scrape',
-      inputSchema: fetchShape
-    },
-    async (input) => {
-      const { url, timeoutMs } = await fetchSchema.parseAsync(input);
-      try {
-        const result = await executeTavilyFetch({ config, url, timeoutMs });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `# 网页抓取\nProvider: ${result.provider}\nURL: ${url}\n\n${result.content}`
-            }
-          ]
-        };
-      } catch (error) {
-        return buildErrorResponse({ query: url, error });
-      }
-    }
-  );
-
-  const mapShape = {
-    url: z.string().trim().url().describe('起始 URL'),
-    instructions: z.string().trim().describe('自然语言过滤指令').optional(),
-    maxDepth: z.number().int().min(1).max(5).describe('最大深度').optional(),
-    maxBreadth: z.number().int().min(1).max(500).describe('每页最大跟踪链接数').optional(),
-    limit: z.number().int().min(1).max(500).describe('总链接上限').optional(),
-    timeout: z.number().int().min(10).max(150).describe('超时秒数').optional()
-  };
-  const mapSchema = z.object(mapShape);
-  server.registerTool(
-    'fusionsearch_map',
-    {
-      title: 'FusionSearch 站点地图',
-      description: '通过 Tavily Map 探测站点结构和链接',
-      inputSchema: mapShape
-    },
-    async (input) => {
-      const parsed = await mapSchema.parseAsync(input);
-      try {
-        const result = await executeTavilyMap({ config, ...parsed });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2)
-            }
-          ]
-        };
-      } catch (error) {
-        return buildErrorResponse({ query: parsed.url, error });
-      }
-    }
-  );
-
   const configShape = {
     testConnection: z.boolean().describe('是否测试 Grok /models 连接').optional()
   };
   const configSchema = z.object(configShape);
   server.registerTool(
-    'fusionsearch_config',
+    'fusion_config',
     {
       title: 'FusionSearch 配置诊断',
       description: '返回 Grok/Tavily/Firecrawl 配置状态，API Key 自动脱敏',
@@ -2225,7 +1857,7 @@ function createFusionSearchTools(server, config, sourceCache, persistConfig) {
   };
   const switchModelSchema = z.object(switchModelShape);
   server.registerTool(
-    'fusionsearch_switch_model',
+    'fusion_switch_model',
     {
       title: 'FusionSearch 模型切换',
       description: '切换默认 Grok 模型并持久化到 runtime 配置',
@@ -3400,30 +3032,13 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
   const streamableSessions = new Map();
   const sseSessions = new Map();
 
-  const registerMcpProfile = (server, profile) => {
+  const registerMcpProfile = (server, _profile) => {
     createPrecisionTools(server, config, sourceCache, {
-      includeSearch: profile === 'full' || profile === 'libresearch',
-      includeFusion: profile === 'full' || profile === 'fusion',
+      includeSearch: false,
+      includeFusion: true,
       monitoring
     });
-
-    if (profile === 'full' || profile === 'libresearch') {
-      createSearchTool(server, config);
-      createBatchSearchTool(server, config);
-      createTopLinksTool(server, config);
-      createAnswersTool(server, config);
-      createFetchHtmlTool(server);
-    }
-
-    if (profile === 'full') {
-      createDualSearchTool(server, config);
-    }
-
-    if (profile === 'full' || profile === 'fusion') {
-      createSearchShTool(server, config);
-      createFusionSearchTools(server, config, sourceCache, persistConfig);
-    }
-
+    createFusionSearchTools(server, config, sourceCache, persistConfig);
     registerResources(server, config);
   };
 

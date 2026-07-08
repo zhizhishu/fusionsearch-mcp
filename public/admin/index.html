@@ -213,7 +213,7 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
                 <h2>密钥中心</h2>
               </div>
-              <p class="panel-note">这里只显示配没配过、以及打码后的值，不会亮出 Cookie、Token 或 API Key 的明文。</p>
+              <p class="panel-note">每个密钥的配置状态、打码预览与来源都在这儿。点右侧 👁 可就地查看明文（仅登录管理员可见，明文不写日志）。</p>
               <div class="key-status-grid" id="keyStatusGrid"></div>
               <div class="test-row">
                 <span class="inline-hint" id="keyStatusHint">保存配置或刷新后同步状态。</span>
@@ -398,12 +398,12 @@
 
             <section class="panel view-panel" data-group-panel="mcp" data-view-panel="full" hidden>
               <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg><h2>Fusion MCP</h2></div>
-              <p class="panel-note">统一入口只推荐 `/mcp`。工具可以拆开调用，也可以用智能工具自动在五层能力之间编排：LibreSearch、Search-2api、Grok、Tavily、Firecrawl。</p>
+              <p class="panel-note">统一入口 `/mcp`。工具精简为 6 个——智能工具在服务端自动编排 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 五层能力并交叉取证，不用客户端在一堆同义工具里挑。</p>
               <div class="kv-list compact">
                 <div><span>主入口</span><strong>/mcp</strong></div>
-                <div><span>智能工具</span><strong>smart_research / smart_fetch / fusion_status</strong></div>
-                <div><span>拆开调用</span><strong>web_search / web_fetch / web_map / libre_search / search2api_chat</strong></div>
-                <div><span>兼容入口</span><strong>/libresearch/mcp / /fusion/mcp</strong></div>
+                <div><span>智能工具</span><strong>smart_research / smart_fetch / web_map</strong></div>
+                <div><span>配置与状态</span><strong>fusion_status / fusion_config / fusion_switch_model</strong></div>
+                <div><span>工具总数</span><strong>6（原 22，已精简）</strong></div>
               </div>
             </section>
 
