@@ -20,7 +20,7 @@ const defaultSubviews = {
   fusion: 'keys',
   mcp: 'full',
   deploy: 'docker',
-  security: 'admin',
+  security: 'session',
   tests: 'libresearch-test',
   status: 'monitoring'
 };
@@ -45,16 +45,12 @@ const legacyRoutes = {
 const fields = {
   searchEndpoint: $('#searchEndpoint'),
   searchShEndpoint: $('#searchShEndpoint'),
-  searchShApiKey: $('#searchShApiKey'),
-  clearSearchShApiKey: $('#clearSearchShApiKey'),
   search2apiProjectUrl: $('#search2apiProjectUrl'),
   search2apiBaseUrl: $('#search2apiBaseUrl'),
   search2apiUpstreamState: $('#search2apiUpstreamState'),
   search2apiRuntimeState: $('#search2apiRuntimeState'),
   search2apiStatusHint: $('#search2apiStatusHint'),
   grokApiUrl: $('#grokApiUrl'),
-  grokApiKey: $('#grokApiKey'),
-  clearGrokApiKey: $('#clearGrokApiKey'),
   grokModel: $('#grokModel'),
   grokModelList: $('#grokModelList'),
   grokModelHint: $('#grokModelHint'),
@@ -68,17 +64,11 @@ const fields = {
   tavilyProviderOptions: $$('[data-tavily-provider-option]'),
   tavilyProviderPanels: $$('[data-tavily-provider-panel]'),
   tavilyApiUrl: $('#tavilyApiUrl'),
-  tavilyApiKey: $('#tavilyApiKey'),
-  clearTavilyApiKey: $('#clearTavilyApiKey'),
   tavilyMcpUrl: $('#tavilyMcpUrl'),
-  tavilyMcpToken: $('#tavilyMcpToken'),
-  clearTavilyMcpToken: $('#clearTavilyMcpToken'),
   tavilyMcpSearchTool: $('#tavilyMcpSearchTool'),
   tavilyMcpExtractTool: $('#tavilyMcpExtractTool'),
   tavilyMcpMapTool: $('#tavilyMcpMapTool'),
   firecrawlApiUrl: $('#firecrawlApiUrl'),
-  firecrawlApiKey: $('#firecrawlApiKey'),
-  clearFirecrawlApiKey: $('#clearFirecrawlApiKey'),
   keyStatusGrid: $('#keyStatusGrid'),
   keyStatusHint: $('#keyStatusHint'),
   categories: $('#categories'),
@@ -105,24 +95,12 @@ const fields = {
   configPathMirror: $('#configPathMirror'),
   adminAuthState: $('#adminAuthState'),
   mcpAuthState: $('#mcpAuthState'),
-  currentAdminToken: $('#currentAdminToken'),
-  currentMcpAdminToken: $('#currentMcpAdminToken'),
-  newAdminToken: $('#newAdminToken'),
   rotateSessionSecret: $('#rotateSessionSecret'),
   syncSecurityHfSecrets: $('#syncSecurityHfSecrets'),
   securityHfToken: $('#securityHfToken'),
-  newMcpAuthToken: $('#newMcpAuthToken'),
-  clearMcpAuthToken: $('#clearMcpAuthToken'),
-  syncMcpHfSecrets: $('#syncMcpHfSecrets'),
-  mcpHfToken: $('#mcpHfToken'),
   securityHint: $('#securityHint'),
-  adminEnvState: $('#adminEnvState'),
-  mcpEnvState: $('#mcpEnvState'),
-  hfSpaceId: $('#hfSpaceId'),
-  hfWriteState: $('#hfWriteState'),
-  hfSecretCount: $('#hfSecretCount'),
-  hfOneTimeToken: $('#hfOneTimeToken'),
-  hfSecretFields: $('#hfSecretFields'),
+  keysWriteHf: $('#keysWriteHf'),
+  keysHfToken: $('#keysHfToken'),
   logFilePath: $('#logFilePath'),
   logCount: $('#logCount'),
   logLevel: $('#logLevel'),
@@ -138,7 +116,6 @@ const fields = {
   saveHint: $('#saveHint')
 };
 
-let hfSecretOptions = [];
 let grokModelOptions = [];
 
 function setStatus(text, kind = '') {
@@ -226,51 +203,16 @@ function selectGrokModel(model) {
   fields.saveHint.textContent = '模型已选择，保存后生效';
 }
 
-function renderHfSecretFields(options = []) {
-  if (!fields.hfSecretFields) return;
-  hfSecretOptions = options;
-  fields.hfSecretFields.innerHTML = options
-    .map((option) => {
-      const control = option.multiline
-        ? `<textarea class="hf-secret-input" data-secret-key="${option.key}" data-secret-description="${option.label}" rows="4" spellcheck="false" placeholder="留空不修改"></textarea>`
-        : `<input class="hf-secret-input" data-secret-key="${option.key}" data-secret-description="${option.label}" type="password" autocomplete="new-password" placeholder="留空不修改" />`;
-      return `
-        <label class="field hf-secret-field">
-          <span>${option.key}</span>
-          ${control}
-          <small>${option.label || ''}</small>
-        </label>
-      `;
-    })
-    .join('');
-}
+let revealedValuesCache = null;
 
-function collectHfSecretUpdates() {
-  return $$('.hf-secret-input')
-    .map((input) => ({
-      key: input.dataset.secretKey,
-      value: input.value,
-      description: input.dataset.secretDescription || ''
-    }))
-    .filter((item) => item.key && item.value.trim())
-    .map((item) => ({ ...item, value: item.value.trim() }));
-}
-
-function clearHfSecretInputs() {
-  $$('.hf-secret-input').forEach((input) => {
-    input.value = '';
-  });
-}
-
-let revealedEnvCache = null;
-
-// Fetch the live process.env once per render so eye-toggles show real values without
-// re-hitting the server on every click. Reset whenever the key list re-renders.
-async function ensureRevealEnv() {
-  if (revealedEnvCache) return revealedEnvCache;
-  const payload = await requestJson('/api/admin/env-reveal');
-  revealedEnvCache = payload?.env || {};
-  return revealedEnvCache;
+// Fetch the live effective values once per render so eye-toggles show real plaintext
+// (env var OR runtime config) without re-hitting the server on every click. Reset
+// whenever the key list re-renders.
+async function ensureRevealValues() {
+  if (revealedValuesCache) return revealedValuesCache;
+  const payload = await requestJson('/api/admin/keys/reveal');
+  revealedValuesCache = payload?.values || {};
+  return revealedValuesCache;
 }
 
 // One delegated listener on the grid; survives innerHTML re-renders of the cards.
@@ -283,7 +225,7 @@ function bindKeyReveal() {
     const card = btn.closest('.key-status-card');
     const code = card?.querySelector('code');
     if (!code) return;
-    const envName = card.dataset.env || '';
+    const keyId = card.dataset.keyId || '';
     if (card.classList.contains('revealed')) {
       code.textContent = code.dataset.masked || '未设置';
       card.classList.remove('revealed');
@@ -293,10 +235,10 @@ function bindKeyReveal() {
     }
     btn.disabled = true;
     try {
-      const env = await ensureRevealEnv();
-      const value = env[envName];
+      const values = await ensureRevealValues();
+      const value = values[keyId];
       code.textContent = (value === undefined || value === '')
-        ? '（进程环境里没取到，可能只存在 runtime 配置里）'
+        ? '（当前没取到值）'
         : value;
       card.classList.add('revealed');
       btn.textContent = '🙈';
@@ -309,24 +251,49 @@ function bindKeyReveal() {
   });
 }
 
+// Per-row editing rules for the unified key center. Mirrors KEY_CENTER_FIELDS on the
+// server: which rows are editable, whether they write back to HF, whether they can be
+// cleared, and the small footnote hint.
+const KEY_CENTER_META = {
+  libresearchEndpoint: { editable: false, hf: false },
+  search2apiBearer: { editable: true, hf: true, clear: true },
+  search2apiCookie: { editable: true, hf: true, clear: false, note: '环境变量 · 存后需重启 Space 生效' },
+  grokApiKey: { editable: true, hf: true, clear: true },
+  tavilyApiKey: { editable: true, hf: true, clear: true },
+  tavilyMcpToken: { editable: true, hf: true, clear: true },
+  firecrawlApiKey: { editable: true, hf: true, clear: true },
+  adminToken: { editable: true, hf: true, clear: false, note: '改后需用新口令重新登录' },
+  mcpAuthToken: { editable: true, hf: true, clear: true }
+};
+
 function renderKeyStatus(items = []) {
   if (!fields.keyStatusGrid) return;
-  revealedEnvCache = null;
+  revealedValuesCache = null;
   fields.keyStatusGrid.innerHTML = items.length
     ? items.map((item) => {
-      const envName = /^[A-Z][A-Z0-9_]+$/.test(item.source || '') ? item.source : '';
+      const meta = KEY_CENTER_META[item.id] || { editable: false, hf: false };
       const masked = item.masked || '未设置';
-      const eye = envName && item.configured
+      const eye = item.configured
         ? `<button type="button" class="key-eye" aria-label="显示明文" title="显示 / 隐藏明文">👁</button>`
         : '';
+      const tag = meta.hf ? '<span class="key-tag">HF</span>' : '';
+      const editor = meta.editable
+        ? `
+        <div class="key-edit">
+          <input class="key-edit-input" type="password" autocomplete="new-password" placeholder="留空则不改，输入即替换" data-key-id="${escapeHtml(item.id)}" />
+          ${meta.clear ? `<label class="key-clear"><input type="checkbox" class="key-clear-box" data-key-id="${escapeHtml(item.id)}" />清空</label>` : ''}
+        </div>
+        ${meta.note ? `<small class="key-note">${escapeHtml(meta.note)}</small>` : ''}`
+        : '<small class="key-note">在对应服务面板里修改</small>';
       return `
-      <article class="key-status-card ${item.configured ? 'configured' : 'missing'}" data-env="${escapeHtml(envName)}">
+      <article class="key-status-card ${item.configured ? 'configured' : 'missing'}" data-key-id="${escapeHtml(item.id)}">
         <div>
-          <span>${escapeHtml(item.label)}</span>
+          <span>${escapeHtml(item.label)}${tag}</span>
           <div class="key-actions"><strong>${item.configured ? '已配置' : '未配置'}</strong>${eye}</div>
         </div>
         <code data-masked="${escapeHtml(masked)}">${escapeHtml(masked)}</code>
         <small>${escapeHtml(formatKeySource(item))}</small>
+        ${editor}
       </article>`;
     }).join('')
     : '<div class="empty-note">暂无 Key 状态</div>';
@@ -524,23 +491,11 @@ async function loadConfig() {
   fields.keyState.textContent = config.hasSearchShApiKey ? '已配置' : '未配置';
   fields.fusionKeyState.textContent = formatFusionKeyState(config.fusion);
   renderKeyStatus(config.keyStatus || []);
-  if (fields.hfSpaceId) fields.hfSpaceId.textContent = config.hfSecrets?.spaceId || '未配置';
-  if (fields.hfWriteState) {
-    fields.hfWriteState.textContent = config.hfSecrets?.canWrite ? 'HF_WRITE_TOKEN 已配置' : '需要 HF_WRITE_TOKEN 或一次性 Token';
-  }
-  if (fields.hfSecretCount) fields.hfSecretCount.textContent = '-';
-  renderHfSecretFields(config.hfSecrets?.options || hfSecretOptions);
   if (fields.adminAuthState) {
     fields.adminAuthState.textContent = config.auth?.adminAuthEnabled ? '已启用' : '未启用';
   }
   if (fields.mcpAuthState) {
     fields.mcpAuthState.textContent = config.auth?.mcpAuthEnabled ? '已启用' : '未启用';
-  }
-  if (fields.adminEnvState) {
-    fields.adminEnvState.textContent = config.envOverrides?.adminToken ? '环境变量已提供，可被运行配置覆盖' : '运行配置管理';
-  }
-  if (fields.mcpEnvState) {
-    fields.mcpEnvState.textContent = config.envOverrides?.mcpAuthToken ? '环境变量已提供，可被运行配置覆盖' : '运行配置管理';
   }
   fields.grokApiUrl.value = config.fusion?.grokApiUrl || '';
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
@@ -554,9 +509,6 @@ async function loadConfig() {
   fields.tavilyMcpExtractTool.value = config.fusion?.tavilyMcpExtractTool || '';
   fields.tavilyMcpMapTool.value = config.fusion?.tavilyMcpMapTool || '';
   fields.firecrawlApiUrl.value = config.fusion?.firecrawlApiUrl || 'https://api.firecrawl.dev/v2';
-  fields.searchShApiKey.value = '';
-  fields.clearSearchShApiKey.checked = false;
-  resetFusionSecrets();
   setStatus('已连接', 'ok');
 }
 
@@ -565,11 +517,7 @@ async function saveConfig() {
   const body = {
     searchEndpoint: fields.searchEndpoint.value.trim(),
     searchShChatEndpoint: fields.searchShEndpoint.value.trim(),
-    searchShApiKey: fields.searchShApiKey.value,
-    clearSearchShApiKey: fields.clearSearchShApiKey.checked,
     grokApiUrl: fields.grokApiUrl.value.trim(),
-    grokApiKey: fields.grokApiKey.value,
-    clearGrokApiKey: fields.clearGrokApiKey.checked,
     grokModel: fields.grokModel.value.trim() || 'grok-4.20-beta',
     syncGrokHfSecrets: fields.syncGrokHfSecrets?.checked ?? false,
     grokHfToken: fields.grokHfToken?.value.trim() || undefined,
@@ -577,17 +525,11 @@ async function saveConfig() {
     tavilyEnabled: fields.tavilyEnabled.checked,
     tavilyProvider: getTavilyProvider(),
     tavilyApiUrl: fields.tavilyApiUrl.value.trim(),
-    tavilyApiKey: fields.tavilyApiKey.value,
-    clearTavilyApiKey: fields.clearTavilyApiKey.checked,
     tavilyMcpUrl: fields.tavilyMcpUrl.value.trim(),
-    tavilyMcpToken: fields.tavilyMcpToken.value,
-    clearTavilyMcpToken: fields.clearTavilyMcpToken.checked,
     tavilyMcpSearchTool: fields.tavilyMcpSearchTool.value.trim(),
     tavilyMcpExtractTool: fields.tavilyMcpExtractTool.value.trim(),
     tavilyMcpMapTool: fields.tavilyMcpMapTool.value.trim(),
     firecrawlApiUrl: fields.firecrawlApiUrl.value.trim(),
-    firecrawlApiKey: fields.firecrawlApiKey.value,
-    clearFirecrawlApiKey: fields.clearFirecrawlApiKey.checked,
     defaultParams: {
       categories: fields.categories.value,
       language: fields.language.value.trim() || 'auto',
@@ -607,10 +549,7 @@ async function saveConfig() {
   fields.keyState.textContent = config.hasSearchShApiKey ? '已配置' : '未配置';
   fields.fusionKeyState.textContent = formatFusionKeyState(config.fusion);
   renderKeyStatus(config.keyStatus || []);
-  fields.searchShApiKey.value = '';
-  fields.clearSearchShApiKey.checked = false;
   if (fields.grokHfToken) fields.grokHfToken.value = '';
-  resetFusionSecrets();
   if (config.hfSync?.requested) {
     const synced = config.hfSync.ok && config.hfSync.updatedKeys?.includes('GROK_MODEL');
     fields.saveHint.textContent = synced
@@ -637,7 +576,85 @@ async function saveConfig() {
 async function loadKeyStatus() {
   const payload = await requestJson('/api/admin/keys/status');
   renderKeyStatus(payload.keyStatus || []);
-  if (fields.keyStatusHint) fields.keyStatusHint.textContent = 'Key 状态已刷新，密钥明文不会回显。';
+  if (fields.keyStatusHint) fields.keyStatusHint.textContent = 'Key 状态已刷新。改完点「保存全部」；👁 可看当前明文。';
+}
+
+// Unified key-center save: collect every filled/cleared row and push to /api/admin/keys.
+// The server applies each to the running config immediately and (by default) writes it
+// back to HF Secrets so a restart keeps it.
+async function saveKeys() {
+  const edits = [];
+  $$('.key-edit-input').forEach((input) => {
+    const id = input.dataset.keyId;
+    if (!id) return;
+    const clearBox = $(`.key-clear-box[data-key-id="${id}"]`);
+    const clear = Boolean(clearBox?.checked);
+    const value = input.value;
+    if (clear || value.trim()) edits.push({ id, value: value.trim(), clear });
+  });
+  if (!edits.length) {
+    if (fields.keyStatusHint) fields.keyStatusHint.textContent = '没有要改的密钥（输入框都空着）。';
+    setStatus('无改动', '');
+    return;
+  }
+  const body = {
+    edits,
+    writeHf: fields.keysWriteHf?.checked ?? true,
+    hfToken: fields.keysHfToken?.value.trim() || undefined
+  };
+  const payload = await requestJson('/api/admin/keys', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (fields.keysHfToken) fields.keysHfToken.value = '';
+  renderKeyStatus(payload.keyStatus || []);
+  const parts = [`已保存 ${payload.changed?.length || 0} 项`];
+  if (payload.hfSync?.requested) {
+    parts.push(payload.hfSync.ok
+      ? `已写回 HF ${payload.hfSync.updatedKeys?.length || 0} 个`
+      : `HF 写回失败：${payload.hfSync.error?.message || (payload.hfSync.failedKeys || []).join(', ') || '请检查 HF_WRITE_TOKEN'}`);
+  }
+  if (payload.envOnlyChanged?.length) parts.push('含环境变量项，需重启 Space 生效');
+  if (payload.adminRequiresLogin) parts.push('Admin 口令已改，请用新口令重新登录');
+  if (fields.keyStatusHint) fields.keyStatusHint.textContent = parts.join(' · ');
+  const hfFailed = payload.hfSync?.requested && !payload.hfSync.ok;
+  setStatus(hfFailed ? 'HF 未同步' : '密钥已保存', hfFailed ? 'fail' : 'ok');
+  renderOutput({
+    ok: payload.ok,
+    changed: payload.changed,
+    envOnlyChanged: payload.envOnlyChanged,
+    adminRequiresLogin: payload.adminRequiresLogin,
+    hfSync: payload.hfSync
+  });
+  if (payload.adminRequiresLogin) {
+    await refreshSession();
+  } else {
+    await loadConfig().catch(() => {});
+  }
+}
+
+// Session-only action from the slimmed 安全 panel: rotate the session secret (kick all
+// old logins). Reuses the same unified endpoint with no key edits.
+async function rotateSession() {
+  if (fields.securityHint) fields.securityHint.textContent = '轮换中';
+  const payload = await requestJson('/api/admin/keys', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      edits: [],
+      rotateSessionSecret: fields.rotateSessionSecret?.checked ?? true,
+      writeHf: fields.syncSecurityHfSecrets?.checked ?? true,
+      hfToken: fields.securityHfToken?.value.trim() || undefined
+    })
+  });
+  if (fields.securityHfToken) fields.securityHfToken.value = '';
+  if (fields.securityHint) {
+    fields.securityHint.textContent = payload.adminRequiresLogin ? '已轮换，请重新登录' : '已轮换';
+  }
+  renderOutput({ ok: payload.ok, adminRequiresLogin: payload.adminRequiresLogin, hfSync: payload.hfSync });
+  setStatus('会话已轮换', 'ok');
+  if (payload.adminRequiresLogin) await refreshSession();
 }
 
 async function loadMonitoring() {
@@ -666,61 +683,6 @@ async function checkRuntime() {
   fields.mcpEndpoint.textContent = status.mcpEndpoint || '/mcp';
   fields.healthState.textContent = health.status || '-';
   setStatus('运行中', 'ok');
-}
-
-async function loadHfSecrets() {
-  renderOutput('读取 Hugging Face Secrets 状态中...');
-  const payload = await requestJson('/api/admin/hf-secrets');
-  renderHfSecretFields(payload.options || hfSecretOptions);
-  if (fields.hfSpaceId) fields.hfSpaceId.textContent = payload.spaceId || '未配置';
-  if (fields.hfWriteState) {
-    fields.hfWriteState.textContent = payload.hasEnvToken ? 'HF_WRITE_TOKEN 已配置' : '可使用一次性 Token 保存';
-  }
-  if (fields.hfSecretCount) {
-    fields.hfSecretCount.textContent = Array.isArray(payload.secrets) ? `${payload.secrets.length} 个` : '-';
-  }
-  renderOutput({
-    ok: payload.ok,
-    spaceId: payload.spaceId,
-    hasEnvToken: payload.hasEnvToken,
-    knownSecrets: (payload.secrets || []).map((item) => item.key),
-    message: payload.message || payload.error?.message
-  });
-  setStatus(payload.ok ? 'HF 已连接' : 'HF 待配置', payload.ok ? 'ok' : 'fail');
-}
-
-async function saveHfSecrets() {
-  const secrets = collectHfSecretUpdates();
-  if (secrets.length === 0) {
-    renderOutput('没有填写需要替换的 Secret。');
-    return;
-  }
-  renderOutput(`准备保存 ${secrets.length} 个 Hugging Face Secret...`);
-  const payload = await requestJson('/api/admin/hf-secrets', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      hfToken: fields.hfOneTimeToken?.value.trim() || undefined,
-      secrets
-    })
-  });
-  fields.hfOneTimeToken.value = '';
-  clearHfSecretInputs();
-  renderOutput({
-    ok: payload.ok,
-    updatedKeys: payload.updatedKeys,
-    runtimeChangedKeys: payload.runtimeChangedKeys,
-    failed: (payload.results || []).filter((item) => !item.ok).map((item) => ({
-      key: item.key,
-      status: item.error?.status,
-      message: item.error?.message
-    })),
-    note: payload.note
-  });
-  setStatus(payload.ok ? 'HF 已保存' : 'HF 部分失败', payload.ok ? 'ok' : 'fail');
-  if (payload.adminRequiresLogin) {
-    await refreshSession();
-  }
 }
 
 async function testSearch() {
@@ -774,73 +736,6 @@ async function auditSearch2api() {
   }
   renderOutput(payload);
   setStatus(payload.ok ? '2api 正常' : '2api 需维修', payload.ok ? 'ok' : 'fail');
-}
-
-async function rotateAdminSecurity() {
-  fields.securityHint.textContent = '更新中';
-  const body = {
-    currentAdminToken: fields.currentAdminToken.value,
-    newAdminToken: fields.newAdminToken.value.trim() || undefined,
-    rotateSessionSecret: fields.rotateSessionSecret.checked,
-    syncHfSecrets: fields.syncSecurityHfSecrets.checked,
-    hfToken: fields.securityHfToken.value.trim() || undefined
-  };
-  const payload = await saveSecurityPayload(body);
-  fields.currentAdminToken.value = '';
-  fields.newAdminToken.value = '';
-  fields.securityHfToken.value = '';
-  fields.rotateSessionSecret.checked = true;
-  fields.securityHint.textContent = payload.adminRequiresLogin ? '已更新，请使用新 Admin Token 重新登录' : '已更新';
-  renderOutput({
-    ok: payload.ok,
-    adminRequiresLogin: payload.adminRequiresLogin,
-    auth: payload.auth,
-    confirmation: payload.confirmation,
-    hfSync: payload.hfSync,
-    note: payload.hfSync?.ok
-      ? 'Token 已同步到 Hugging Face Secrets，Space 重启后不会恢复旧口令。'
-      : 'Token 已写入当前运行时；如果 HF Secrets 未同步，Space 重启后仍会读取旧环境变量。'
-  });
-  if (payload.adminRequiresLogin) {
-    await refreshSession();
-  } else {
-    await loadConfig();
-  }
-}
-
-async function rotateMcpSecurity() {
-  const body = {
-    currentAdminToken: fields.currentMcpAdminToken.value,
-    newMcpAuthToken: fields.newMcpAuthToken.value.trim() || undefined,
-    clearMcpAuthToken: fields.clearMcpAuthToken.checked,
-    syncHfSecrets: fields.syncMcpHfSecrets.checked,
-    hfToken: fields.mcpHfToken.value.trim() || undefined
-  };
-  const payload = await saveSecurityPayload(body);
-  fields.currentMcpAdminToken.value = '';
-  fields.newMcpAuthToken.value = '';
-  fields.mcpHfToken.value = '';
-  fields.clearMcpAuthToken.checked = false;
-  renderOutput({
-    ok: payload.ok,
-    auth: payload.auth,
-    confirmation: payload.confirmation,
-    hfSync: payload.hfSync,
-    note: payload.hfSync?.ok
-      ? 'MCP Token 已同步到 Hugging Face Secrets，客户端也要同步替换 Bearer Token。'
-      : 'MCP Token 已写入当前运行时；如果 HF Secrets 未同步，Space 重启后可能恢复旧 Bearer。'
-  });
-  await loadConfig();
-}
-
-async function saveSecurityPayload(body) {
-  const payload = await requestJson('/api/admin/security', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  setStatus('安全已更新', 'ok');
-  return payload;
 }
 
 async function loadLogs() {
@@ -996,17 +891,6 @@ async function listGrokModels() {
   setStatus(payload.ok ? '模型可选择' : '模型异常', payload.ok ? 'ok' : 'fail');
 }
 
-function resetFusionSecrets() {
-  fields.grokApiKey.value = '';
-  fields.tavilyApiKey.value = '';
-  fields.tavilyMcpToken.value = '';
-  fields.firecrawlApiKey.value = '';
-  fields.clearGrokApiKey.checked = false;
-  fields.clearTavilyApiKey.checked = false;
-  fields.clearTavilyMcpToken.checked = false;
-  fields.clearFirecrawlApiKey.checked = false;
-}
-
 function bindAction(selector, action) {
   const element = $(selector);
   if (!element) return;
@@ -1036,11 +920,9 @@ bindAction('#testSearch', testSearch);
 bindAction('#testSearchSh', testSearchSh);
 bindAction('#auditSearch2api', auditSearch2api);
 bindAction('#auditSearch2apiFromTests', auditSearch2api);
-bindAction('#rotateSecurity', rotateAdminSecurity);
-bindAction('#rotateMcpSecurity', rotateMcpSecurity);
-bindAction('#loadHfSecrets', loadHfSecrets);
-bindAction('#saveHfSecrets', saveHfSecrets);
+bindAction('#rotateSession', rotateSession);
 bindAction('#loadLogs', loadLogs);
+bindAction('#saveKeys', saveKeys);
 bindAction('#refreshKeyStatus', loadKeyStatus);
 bindAction('#refreshMonitoring', loadMonitoring);
 bindAction('#probeMonitoring', probeMonitoring);

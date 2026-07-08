@@ -23,6 +23,7 @@ import {
   getFusionPublicConfig
 } from './fusionClients.js';
 import {
+  buildKeyReveal,
   buildKeyStatus,
   buildMonitoringSnapshot,
   createMonitoringState,
@@ -110,6 +111,26 @@ const HF_SECRET_OPTIONS = [
   { key: 'HF_WRITE_TOKEN', label: 'HF write token for future secret edits', multiline: false }
 ];
 const HF_SECRET_KEYS = HF_SECRET_OPTIONS.map((item) => item.key);
+
+// Single source of truth for the unified key center (PUT /api/admin/keys). Maps each
+// buildKeyStatus row id to how it is applied. kind:
+//   'plain'    → runtime config only, NOT written to HF Secrets (endpoints belong in
+//                Variables; writing them as Secrets would risk a name collision).
+//   'secret'   → runtime config + (default) HF Secret write-back.
+//   'env-only' → no runtime field; HF Secret write-back only (needs restart to apply).
+//   'admin'    → admin login token: runtime + auth.update + session rotation + re-login.
+//   'mcp'      → MCP bearer: runtime + auth.update; clearable to disable MCP auth.
+const KEY_CENTER_FIELDS = {
+  libresearchEndpoint: { configField: 'searchEndpoint', hfKey: 'SEARCH_ENDPOINT', kind: 'plain' },
+  search2apiBearer: { configField: 'searchShApiKey', hfKey: 'SEARCH_SH_API_KEY', kind: 'secret' },
+  search2apiCookie: { configField: null, hfKey: 'SEARCH_SH_COOKIE', kind: 'env-only' },
+  grokApiKey: { configField: 'grokApiKey', hfKey: 'GROK_API_KEY', kind: 'secret' },
+  tavilyApiKey: { configField: 'tavilyApiKey', hfKey: 'TAVILY_API_KEY', kind: 'secret' },
+  tavilyMcpToken: { configField: 'tavilyMcpToken', hfKey: 'TAVILY_MCP_TOKEN', kind: 'secret' },
+  firecrawlApiKey: { configField: 'firecrawlApiKey', hfKey: 'FIRECRAWL_API_KEY', kind: 'secret' },
+  adminToken: { configField: 'adminToken', hfKey: 'ADMIN_TOKEN', kind: 'admin' },
+  mcpAuthToken: { configField: 'mcpAuthToken', hfKey: 'MCP_AUTH_TOKEN', kind: 'mcp' }
+};
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
   'keep-alive',
@@ -222,6 +243,23 @@ const hfSecretUpdateSchema = z.object({
     )
     .min(1)
     .max(HF_SECRET_KEYS.length)
+});
+
+const keyCenterUpdateSchema = z.object({
+  edits: z
+    .array(
+      z.object({
+        id: z.enum(Object.keys(KEY_CENTER_FIELDS)),
+        value: z.string().max(50_000).optional(),
+        clear: z.boolean().optional()
+      })
+    )
+    .max(Object.keys(KEY_CENTER_FIELDS).length)
+    .optional()
+    .default([]),
+  rotateSessionSecret: z.boolean().optional(),
+  writeHf: z.boolean().optional().default(true),
+  hfToken: z.string().trim().optional()
 });
 
 const adminSearchTestSchema = z.object({
@@ -2231,6 +2269,153 @@ export function createApp(userConfig = {}) {
       keyStatus: buildKeyStatus(config)
     });
   });
+
+  // Owner-only: live plaintext behind each key-status row (env var or runtime config).
+  // Admin-locked, same gate as the rest of /api/admin/*. Powers the 👁 reveal in the
+  // key center; values are never written to logs.
+  app.get('/api/admin/keys/reveal', auth.requireAdmin, (_req, res) => {
+    res.json({ ok: true, values: buildKeyReveal(config) });
+  });
+
+  // Unified key-center save. One endpoint edits every secret: applies to the running
+  // config immediately (so it takes effect now) and, by default, writes it back to HF
+  // Secrets (so a restart/rebuild keeps it). Endpoint-type rows are runtime-only.
+  app.put('/api/admin/keys', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const next = await keyCenterUpdateSchema.parseAsync(req.body ?? {});
+    const changed = [];
+    const applied = []; // secrets to push to HF: { id, hfKey, value }
+    const envOnlyChanged = [];
+    let adminChanged = false;
+    let mcpChanged = false;
+
+    for (const edit of next.edits) {
+      const spec = KEY_CENTER_FIELDS[edit.id];
+      if (!spec) continue;
+      const clear = Boolean(edit.clear);
+      const value = typeof edit.value === 'string' ? edit.value.trim() : '';
+      if (!clear && !value) continue; // nothing supplied for this row
+
+      // Admin token can only be set, never cleared here — clearing it would drop the
+      // lock on a public Space. Require an explicit new value.
+      if (spec.kind === 'admin') {
+        if (!value) continue;
+        config.adminToken = value;
+        config.adminAuthEnabled = true;
+        adminChanged = true;
+        changed.push(edit.id);
+        applied.push({ id: edit.id, hfKey: spec.hfKey, value });
+        continue;
+      }
+
+      if (spec.kind === 'mcp') {
+        config.mcpAuthToken = clear ? '' : value;
+        mcpChanged = true;
+        changed.push(edit.id);
+        if (!clear && value) applied.push({ id: edit.id, hfKey: spec.hfKey, value });
+        continue;
+      }
+
+      if (spec.kind === 'env-only') {
+        // No runtime field to update; only persist to HF (takes effect after restart).
+        if (!clear && value) applied.push({ id: edit.id, hfKey: spec.hfKey, value });
+        changed.push(edit.id);
+        envOnlyChanged.push(edit.id);
+        continue;
+      }
+
+      // 'plain' + 'secret': update runtime config field.
+      if (spec.configField) {
+        config[spec.configField] = clear ? '' : value;
+      }
+      changed.push(edit.id);
+      if (spec.kind === 'secret' && !clear && value) {
+        applied.push({ id: edit.id, hfKey: spec.hfKey, value });
+      }
+    }
+
+    const sessionRotated = Boolean(next.rotateSessionSecret || adminChanged);
+    if (sessionRotated) {
+      config.sessionSecret = createSecret();
+    }
+    const adminRequiresLogin = Boolean(adminChanged || next.rotateSessionSecret);
+
+    auth.update({
+      adminAuthEnabled: config.adminAuthEnabled,
+      adminToken: config.adminToken,
+      sessionSecret: config.sessionSecret,
+      mcpAuthToken: config.mcpAuthToken
+    });
+    await persistConfig();
+
+    const hfSync = {
+      requested: false,
+      ok: false,
+      updatedKeys: [],
+      failedKeys: [],
+      results: [],
+      error: null
+    };
+    const secretsToWrite = applied.map((item) => ({
+      key: item.hfKey,
+      value: item.value,
+      description: `Key center · ${item.id}`
+    }));
+    if (sessionRotated) {
+      secretsToWrite.push({
+        key: 'SESSION_SECRET',
+        value: config.sessionSecret,
+        description: 'Session signing secret'
+      });
+    }
+    if (next.writeHf !== false && secretsToWrite.length) {
+      hfSync.requested = true;
+      const token = resolveHfWriteToken(next.hfToken);
+      const spaceId = resolveHfSpaceId(config);
+      if (!spaceId) {
+        hfSync.error = { code: 'HF_SPACE_ID_MISSING', message: 'HF_SPACE_ID/SPACE_ID is not configured' };
+      } else if (!token) {
+        hfSync.error = { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN is not configured' };
+      } else {
+        hfSync.results = await writeHfSecrets(config, { token, secrets: secretsToWrite });
+        hfSync.updatedKeys = hfSync.results.filter((item) => item.ok).map((item) => item.key);
+        hfSync.failedKeys = hfSync.results.filter((item) => !item.ok).map((item) => item.key);
+        hfSync.ok = hfSync.results.every((item) => item.ok);
+      }
+    }
+
+    if (adminRequiresLogin) {
+      auth.clearSession(req, res);
+    }
+
+    logEvent('info', 'keys', 'Key center update', {
+      changed,
+      adminChanged,
+      mcpChanged,
+      sessionRotated,
+      adminRequiresLogin,
+      envOnlyChanged,
+      hfSync: {
+        requested: hfSync.requested,
+        ok: hfSync.ok,
+        updatedKeys: hfSync.updatedKeys,
+        failedKeys: hfSync.failedKeys,
+        error: hfSync.error
+      }
+    });
+
+    res.json({
+      ok: true,
+      changed,
+      envOnlyChanged,
+      adminRequiresLogin,
+      auth: {
+        adminAuthEnabled: auth.adminAuthEnabled,
+        mcpAuthEnabled: auth.mcpAuthEnabled
+      },
+      keyStatus: buildKeyStatus(config),
+      hfSync
+    });
+  }));
 
   // Owner-only raw env reveal (admin-locked). HF Secrets are injected as container
   // env vars and HF never echoes them back; this lets the owner read the live values.

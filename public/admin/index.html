@@ -111,10 +111,7 @@
               <button class="subnav-item" type="button" data-subview="routes">路由规则</button>
             </div>
             <div class="subnav-group" data-subnav-group="security" hidden>
-              <button class="subnav-item active" type="button" data-subview="admin">Admin Token</button>
-              <button class="subnav-item" type="button" data-subview="mcp-token">MCP Token</button>
-              <button class="subnav-item" type="button" data-subview="hf-secrets">HF Secrets</button>
-              <button class="subnav-item" type="button" data-subview="hf-oauth">HF OAuth</button>
+              <button class="subnav-item active" type="button" data-subview="session">会话与登录</button>
             </div>
             <div class="subnav-group" data-subnav-group="tests" hidden>
               <button class="subnav-item active" type="button" data-subview="libresearch-test">LibreSearch</button>
@@ -191,14 +188,7 @@
                 <span>Chat Completions</span>
                 <input id="searchShEndpoint" type="url" autocomplete="off" spellcheck="false" />
               </label>
-              <label class="field">
-                <span>Bearer Key</span>
-                <input id="searchShApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-              </label>
-              <label class="check-row">
-                <input id="clearSearchShApiKey" type="checkbox" />
-                <span>清空已保存密钥</span>
-              </label>
+              <p class="inline-hint">🔑 Bearer Key 到「密钥中心」统一查看 / 修改。</p>
               <div class="test-row">
                 <button class="soft-button" id="auditSearch2api">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h4l2-7 4 14 2-7h4" /></svg>
@@ -213,14 +203,27 @@
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
                 <h2>密钥中心</h2>
               </div>
-              <p class="panel-note">每个密钥的配置状态、打码预览与来源都在这儿。点右侧 👁 可就地查看明文（仅登录管理员可见，明文不写日志）。</p>
+              <p class="panel-note">所有密钥的查看、修改、持久化都收在这一处。👁 看当前生效明文；下方输入框填新值即替换（留空则不改）；保存默认写回 Hugging Face Secrets，Space 重启也不丢。仅登录管理员可见，明文不写日志。</p>
               <div class="key-status-grid" id="keyStatusGrid"></div>
+              <label class="check-row" id="keysWriteHfRow">
+                <input id="keysWriteHf" type="checkbox" checked />
+                <span>保存时写回 Hugging Face Secrets（重启后仍生效）</span>
+              </label>
+              <label class="field">
+                <span>一次性 HF Write Token</span>
+                <input id="keysHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
+                <small>只用于本次写回；完整 Token 不回显、不写日志。</small>
+              </label>
               <div class="test-row">
-                <span class="inline-hint" id="keyStatusHint">保存配置或刷新后同步状态。</span>
+                <button class="primary-button" id="saveKeys" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
+                  保存全部
+                </button>
                 <button class="soft-button" id="refreshKeyStatus" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
-                  刷新密钥状态
+                  刷新状态
                 </button>
+                <span class="inline-hint" id="keyStatusHint">改完点「保存全部」；环境变量类（如 Cookie）保存后需重启 Space 才生效。</span>
               </div>
             </section>
 
@@ -234,14 +237,7 @@
                 <span>Grok API URL</span>
                 <input id="grokApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/v1" />
               </label>
-              <label class="field">
-                <span>Grok API Key</span>
-                <input id="grokApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-              </label>
-              <label class="check-row">
-                <input id="clearGrokApiKey" type="checkbox" />
-                <span>清空 Grok Key</span>
-              </label>
+              <p class="inline-hint">🔑 Grok API Key 到「密钥中心」统一查看 / 修改。</p>
               <label class="field">
                 <span>默认模型</span>
                 <input id="grokModel" type="text" autocomplete="off" />
@@ -335,14 +331,7 @@
                   <input id="tavilyApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://api.tavily.com" />
                   <small>官方默认地址可不改；镜像站或代理网关填自己的 Base URL。</small>
                 </label>
-                <label class="field">
-                  <span>Tavily API Key</span>
-                  <input id="tavilyApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-                </label>
-                <label class="check-row">
-                  <input id="clearTavilyApiKey" type="checkbox" />
-                  <span>清空 Tavily REST Key</span>
-                </label>
+                <p class="inline-hint">🔑 Tavily REST Key 到「密钥中心」统一查看 / 修改。</p>
               </div>
 
               <div class="provider-panel span-2" data-tavily-provider-panel="mcp" hidden>
@@ -351,14 +340,7 @@
                   <input id="tavilyMcpUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://tavily.ivanli.cc/mcp" />
                   <small>例如 Hikari 或你自己的 Tavily MCP 网关地址。</small>
                 </label>
-                <label class="field">
-                  <span>Tavily MCP Token</span>
-                  <input id="tavilyMcpToken" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-                </label>
-                <label class="check-row">
-                  <input id="clearTavilyMcpToken" type="checkbox" />
-                  <span>清空 MCP Token</span>
-                </label>
+                <p class="inline-hint">🔑 Tavily MCP Token 到「密钥中心」统一查看 / 修改。</p>
                 <div class="field-grid span-2">
                   <label class="field">
                     <span>Search Tool</span>
@@ -386,14 +368,7 @@
                 <span>Firecrawl API URL</span>
                 <input id="firecrawlApiUrl" type="url" autocomplete="off" spellcheck="false" />
               </label>
-              <label class="field">
-                <span>Firecrawl API Key</span>
-                <input id="firecrawlApiKey" type="password" autocomplete="new-password" placeholder="保持空白则不修改" />
-              </label>
-              <label class="check-row">
-                <input id="clearFirecrawlApiKey" type="checkbox" />
-                <span>清空 Firecrawl Key</span>
-              </label>
+              <p class="inline-hint">🔑 Firecrawl API Key 到「密钥中心」统一查看 / 修改。</p>
             </section>
 
             <section class="panel view-panel" data-group-panel="mcp" data-view-panel="full" hidden>
@@ -430,109 +405,35 @@
               </div>
             </section>
 
-            <section class="panel view-panel" data-group-panel="security" data-view-panel="admin" hidden>
-              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg><h2>Admin Token</h2></div>
+            <section class="panel view-panel" data-group-panel="security" data-view-panel="session" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg><h2>会话与登录</h2></div>
+              <p class="panel-note">Admin 口令、MCP Bearer 的查看和修改已经并入「密钥中心」——去那里改，保存即写回 HF。这一页只保留会话级操作。</p>
               <div class="kv-list compact">
-                <div><span>状态</span><strong id="adminAuthState">-</strong></div>
+                <div><span>Admin 鉴权</span><strong id="adminAuthState">-</strong></div>
+                <div><span>MCP 鉴权</span><strong id="mcpAuthState">-</strong></div>
                 <div><span>范围</span><strong>/admin 与 /api/admin/*</strong></div>
-                <div><span>来源</span><strong id="adminEnvState">-</strong></div>
               </div>
-              <label class="field">
-                <span>当前 Admin Token</span>
-                <input id="currentAdminToken" type="password" autocomplete="current-password" placeholder="已登录即可修改，可留空" />
-              </label>
-              <label class="field">
-                <span>新的 Admin Token</span>
-                <input id="newAdminToken" type="password" autocomplete="new-password" placeholder="留空则不改" />
-              </label>
               <label class="check-row">
                 <input id="rotateSessionSecret" type="checkbox" checked />
-                <span>同时轮换 Session Secret，让旧登录立即失效</span>
+                <span>轮换 Session Secret（让所有旧登录立即失效）</span>
               </label>
               <label class="check-row">
                 <input id="syncSecurityHfSecrets" type="checkbox" checked />
-                <span>同步写入 Hugging Face Secrets，防止 Space 重启恢复旧口令</span>
+                <span>同步写回 Hugging Face Secrets（重启后仍生效）</span>
               </label>
               <label class="field">
                 <span>一次性 HF Write Token</span>
                 <input id="securityHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
               </label>
               <div class="test-row">
-                <button class="primary-button" id="rotateSecurity">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
-                  更新安全设置
-                </button>
-                <span class="inline-hint" id="securityHint">口令不会显示出来；存好马上生效</span>
-              </div>
-            </section>
-            <section class="panel view-panel" data-group-panel="security" data-view-panel="mcp-token" hidden>
-              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg><h2>MCP Token</h2></div>
-              <div class="kv-list compact">
-                <div><span>状态</span><strong id="mcpAuthState">-</strong></div>
-                <div><span>范围</span><strong>主入口 /mcp，兼容旧 profile 路由</strong></div>
-                <div><span>来源</span><strong id="mcpEnvState">-</strong></div>
-              </div>
-              <label class="field">
-                <span>当前 Admin Token</span>
-                <input id="currentMcpAdminToken" type="password" autocomplete="current-password" placeholder="已登录即可修改，可留空" />
-              </label>
-              <label class="field">
-                <span>新的 MCP Token</span>
-                <input id="newMcpAuthToken" type="password" autocomplete="new-password" placeholder="留空则不改" />
-              </label>
-              <label class="check-row">
-                <input id="clearMcpAuthToken" type="checkbox" />
-                <span>清空 MCP Token，关闭 MCP 鉴权</span>
-              </label>
-              <label class="check-row">
-                <input id="syncMcpHfSecrets" type="checkbox" checked />
-                <span>同步写入 Hugging Face Secrets，防止 Space 重启恢复旧 Bearer</span>
-              </label>
-              <label class="field">
-                <span>一次性 HF Write Token</span>
-                <input id="mcpHfToken" type="password" autocomplete="new-password" placeholder="HF_WRITE_TOKEN 已配置可留空" />
-              </label>
-              <div class="test-row">
-                <button class="primary-button" id="rotateMcpSecurity">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6z" /></svg>
-                  更新 MCP Token
-                </button>
-                <span class="inline-hint">客户端需要同步替换 Bearer Token</span>
-              </div>
-            </section>
-            <section class="panel view-panel" data-group-panel="security" data-view-panel="hf-secrets" hidden>
-              <div class="panel-title">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6l-7-3Z" /></svg>
-                <h2>Hugging Face Secrets</h2>
-              </div>
-              <p class="panel-note">只填你要换的值。已有的 Secret 不会显示出来；存好之后要重启 Space，正在跑的容器才会读到新值。</p>
-              <div class="kv-list compact">
-                <div><span>Space</span><strong id="hfSpaceId">-</strong></div>
-                <div><span>写入令牌</span><strong id="hfWriteState">-</strong></div>
-                <div><span>已知 Secret</span><strong id="hfSecretCount">-</strong></div>
-              </div>
-              <label class="field">
-                <span>一次性 HF Write Token</span>
-                <input id="hfOneTimeToken" type="password" autocomplete="new-password" placeholder="如果 HF_WRITE_TOKEN 已配置，这里可留空" />
-              </label>
-              <div class="hf-secret-grid" id="hfSecretFields"></div>
-              <div class="test-row">
-                <button class="soft-button" id="loadHfSecrets" type="button">
+                <button class="primary-button" id="rotateSession" type="button">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
-                  读取状态
+                  轮换 Session
                 </button>
-                <button class="primary-button" id="saveHfSecrets" type="button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
-                  保存 Secrets
-                </button>
+                <span class="inline-hint" id="securityHint">轮换后需要重新登录。</span>
               </div>
-            </section>
-            <section class="panel view-panel" data-group-panel="security" data-view-panel="hf-oauth" hidden>
-              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12l2 2 4-4M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" /></svg><h2>HF OAuth</h2></div>
-              <label class="field">
-                <span>OAuth Callback</span>
-                <input type="url" placeholder="/auth/huggingface/callback" disabled />
-              </label>
+              <p class="panel-note" style="margin-top:8px">想一次性把所有密钥导出（.env 格式）备份？打开只有管理员能访问的密钥总览页：</p>
+              <a class="soft-button" href="/api/admin/env-page" target="_blank" rel="noopener">🔑 打开密钥总览页</a>
             </section>
 
             <section class="panel view-panel" data-group-panel="tests" data-view-panel="libresearch-test" hidden>

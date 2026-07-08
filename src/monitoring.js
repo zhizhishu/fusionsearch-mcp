@@ -56,6 +56,31 @@ export function buildKeyStatus(config = {}) {
   ];
 }
 
+// Owner-only: the live plaintext value behind each key-status row, resolved the same
+// way buildKeyStatus resolves configured/masked (env var wins, then runtime config).
+// Used by the 👁 reveal in the admin key center so runtime-only values also show,
+// not just the ones injected from HF Secrets. Never logged; admin-locked endpoint only.
+export function buildKeyReveal(config = {}) {
+  const fusion = resolveFusionConfig(config);
+  const pick = (envNames, fallback) => {
+    for (const name of envNames) {
+      if (process.env[name]) return process.env[name];
+    }
+    return fallback || '';
+  };
+  return {
+    libresearchEndpoint: pick(['SEARCH_ENDPOINT'], config.searchEndpoint),
+    search2apiBearer: pick(['SEARCH_SH_API_KEY', 'API_MASTER_KEY'], config.searchShApiKey),
+    search2apiCookie: pick(['SEARCH_SH_COOKIE'], ''),
+    grokApiKey: pick(['GROK_API_KEY'], fusion.grokApiKey),
+    tavilyApiKey: pick(['TAVILY_API_KEY'], fusion.tavilyApiKey),
+    tavilyMcpToken: pick(['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN'], fusion.tavilyMcpToken),
+    firecrawlApiKey: pick(['FIRECRAWL_API_KEY'], fusion.firecrawlApiKey),
+    adminToken: pick(['ADMIN_TOKEN'], config.adminToken),
+    mcpAuthToken: pick(['MCP_AUTH_TOKEN'], config.mcpAuthToken)
+  };
+}
+
 export function buildMonitoringSnapshot(config = {}, monitor = createMonitoringState()) {
   const keyStatus = buildKeyStatus(config);
   const fusion = getFusionPublicConfig(config);

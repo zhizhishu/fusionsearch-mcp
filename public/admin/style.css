@@ -809,6 +809,66 @@ input:focus, select:focus, textarea:focus {
   user-select: all;
 }
 
+.key-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-line);
+  background: var(--card);
+  color: color-mix(in oklch, var(--primary) 70%, var(--foreground));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.key-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.key-edit-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--foreground);
+  font: 12px/1.4 var(--font-mono);
+}
+
+.key-edit-input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  background: color-mix(in oklch, var(--card) 82%, white);
+}
+
+.key-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.key-clear input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--danger);
+}
+
+.key-note {
+  color: color-mix(in oklch, var(--muted-foreground) 88%, var(--primary)) !important;
+  font-size: 11px !important;
+}
+
 /* ——————————————————————————————————————————————
    监控
    —————————————————————————————————————————————— */

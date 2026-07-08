@@ -198,20 +198,30 @@ FIRECRAWL_API_KEY=<可选>
 
 不要把 Cookie、API Key、Admin Token、MCP Token 提交到 GitHub 或 Hugging Face 文件里。它们只应该放在 `.env`、服务器环境变量或 HF Secrets。
 
-### Admin UI 回写 Hugging Face Secrets
+### 密钥中心（统一查看 / 修改 / 回写）
 
-`/admin` 现在可以直接替换 Hugging Face Space Secrets。推荐先配置：
+所有密钥的查看、修改、持久化都收在 `/admin -> 密钥中心` 一处，不再分散到多个页。推荐先配置：
 
 ```text
 HF_SPACE_ID=alphaeee/fusionsearch-mcp
 HF_WRITE_TOKEN=<有该 Space 写权限的 Hugging Face token>
 ```
 
-如果运行中的容器还没有 `HF_WRITE_TOKEN`，可以在 `/admin -> 安全 -> HF Secrets -> 一次性 HF Write Token` 里临时粘贴一次。UI 也可以把 `HF_WRITE_TOKEN` 自己保存成 Space Secret，方便后续继续改。已有 Secret 值不会回显；留空字段会被忽略。
+密钥中心每一行包含：
 
-替换 Secret 后，重启 Space 让容器重新读取环境变量。`ADMIN_TOKEN`、`SESSION_SECRET`、`MCP_AUTH_TOKEN` 在 UI 保存成功后也会同步到当前运行时：如果改了 Admin Token 或 Session Secret，当前登录会失效，需要用新口令重新登录。Admin/MCP Token 不限制固定长度，短口令可用，但公网环境仍建议使用长随机值。安全页已经登录后即可修改 Token，“当前 Admin Token”只是可选确认项，可以留空。
+- **状态 + 打码预览**：是否已配置、来源（HF 环境变量 / runtime）。
+- **👁 明文**：点开就地显示当前实际生效的明文（HF 环境变量或 runtime 配置都认），仅登录管理员可见，明文不写日志。
+- **内联修改**：在输入框填新值即替换，留空则不改；带 `清空` 勾选的行可清空。
+- **`HF` 标记**：表示保存时会写回 Hugging Face Secrets。
 
-如果只在 `/admin -> 安全` 改 Admin Token，但没有同步写入 HF Secrets，Space 重启时会重新读取 `ADMIN_TOKEN` 环境变量，所以口令会恢复成 HF Secrets 里的旧值。新版安全页默认勾选“同步写入 Hugging Face Secrets”；只要 `HF_WRITE_TOKEN` 已配置，或临时粘贴一次性 HF token，改口令就会同时更新 Space Secret，重启后不会回退。
+点「保存全部」时，改动会**立刻应用到正在运行的容器**（秒生效），并且默认**同时写回 HF Secrets**（勾选「保存时写回 Hugging Face Secrets」），这样 Space 重启 / 重建也不会丢。如果运行中的容器还没有 `HF_WRITE_TOKEN`，可以在密钥中心的「一次性 HF Write Token」里临时粘贴一次；完整 Token 不回显、不写日志。
+
+几个要点：
+
+- **环境变量类（如 `SEARCH_SH_COOKIE`）** 没有 runtime 字段，只能写回 HF Secrets，需要**重启 Space** 才生效；保存后 UI 会提示。
+- **Admin 口令 / MCP Bearer** 也在密钥中心里改：保存成功即更新当前运行时；改了 Admin 口令后当前登录会失效，需要用新口令重新登录。Admin/MCP Token 不限制固定长度，短口令可用，公网环境仍建议长随机值。
+- **端点类（如 LibreSearch Endpoint）** 不是密钥，不写回 HF Secrets（避免与 Variables 撞名），在对应服务面板里修改。
+- 只想轮换会话（踢掉所有旧登录）去 `/admin -> 安全 -> 会话与登录`；那里也有「打开密钥总览页」，一次性把所有密钥按 `.env` 格式导出备份。
 
 ### 第三方 Tavily MCP / Hikari
 
