@@ -52,6 +52,27 @@ shutdown() {
 
 trap 'shutdown 143' INT TERM
 
+# 注入 SearXNG outgoing.proxies —— 引擎出站走 resin 代理池，绕开搜索引擎对 HF 数据中心 IP 的封杀。
+# SEARXNG_PROXY_URL: 逗号分隔的 socks5:// 列表(经 HF Secret 注入，绝不进公开库)；空则直连、维持现状。
+# 失败(路径/yaml 异常)只告警不阻断启动，SearXNG 退回直连(不会比现在更糟)。
+if [ -n "${SEARXNG_PROXY_URL:-}" ]; then
+  echo "[fusionsearch] injecting outgoing.proxies into searxng settings"
+  SEARXNG_SETTINGS_FILE="${__SEARXNG_SETTINGS_PATH:-/etc/searxng/settings.yml}" \
+    /usr/local/searxng/.venv/bin/python3 - <<'PYEOF' || echo "[fusionsearch] WARN: searxng proxy inject failed; running direct"
+import os, sys, yaml
+path = os.environ.get('SEARXNG_SETTINGS_FILE', '/etc/searxng/settings.yml')
+proxies = [u.strip() for u in os.environ.get('SEARXNG_PROXY_URL', '').split(',') if u.strip()]
+if not proxies:
+    sys.exit(0)
+with open(path) as f:
+    cfg = yaml.safe_load(f) or {}
+cfg.setdefault('outgoing', {})['proxies'] = {'all://': proxies}
+with open(path, 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+print('[fusionsearch] searxng outgoing.proxies set: %d proxy(ies)' % len(proxies))
+PYEOF
+fi
+
 start_service "libresearch" "libresearch" sh -c 'cd /usr/local/searxng && /usr/local/searxng/entrypoint.sh'
 start_service "search2api" "search2api" /opt/search2api-venv/bin/uvicorn main:app --app-dir /app/services/search2api --host 127.0.0.1 --port 8000
 start_service "fusionsearch" "fusionsearch" node /app/src/server.js
