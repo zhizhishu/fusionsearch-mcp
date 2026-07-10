@@ -21,6 +21,7 @@ _PROXY_ERROR_MARKERS = ("upstream request failed", "proxy authentication failed"
 # 出口超时调优：连接 8s / 读 20s 快速判死；连上但 18s 不出内容当慢节点切走。
 _HTTP_TIMEOUT = httpx.Timeout(connect=8.0, read=20.0, write=10.0, pool=8.0)
 _FIRST_TOKEN_DEADLINE = 18.0
+_TOTAL_DEADLINE = 42.0        # 单次请求总上限；已吐内容的慢出口到点截断收尾，未吐的切走
 
 
 def _parse_multivalue(raw: str) -> List[str]:
@@ -176,6 +177,7 @@ class SearchProvider:
             "query": self._extract_query(payload),
             "currentDate": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
+        req_start = time.monotonic()
 
         candidates = self._candidate_indices()
         if not candidates:
@@ -187,6 +189,8 @@ class SearchProvider:
 
         last_err: Optional[str] = None
         for idx in candidates[:_MAX_ATTEMPTS]:
+            if time.monotonic() - req_start > _TOTAL_DEADLINE:
+                break
             value = self.rotate_values[idx]
             headers = dict(self.base_headers)
             if self.rotate_header and value:
@@ -218,7 +222,11 @@ class SearchProvider:
                         last_answer = ""
                         started = time.monotonic()
                         async for line in response.aiter_lines():
-                            if not yielded and (time.monotonic() - started) > _FIRST_TOKEN_DEADLINE:
+                            over_total = (time.monotonic() - req_start) > _TOTAL_DEADLINE
+                            if yielded:
+                                if over_total:
+                                    return  # 已吐部分内容 + 到总上限 -> 截断收尾，不串味不干等
+                            elif over_total or (time.monotonic() - started) > _FIRST_TOKEN_DEADLINE:
                                 node_failed = True
                                 break
                             if not line:
