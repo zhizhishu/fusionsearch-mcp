@@ -278,11 +278,15 @@ export function buildCrossCheck({ items, attempts }) {
     reasons.push('最佳信源仅单源支持，置信度受限');
   }
 
-  // 置信度奖励"独立佐证"而非单纯 provider 数。
+  // 置信度只认"独立佐证"，不认原始数量。
+  // 关键: 早期版本有 `|| fetchedEvidence >= 2` 的松口子——只要抓到 2 篇正文(哪怕是
+  // gap-fill 拖进来的无关新闻)就升 medium，导致"无关证据越多越自信"。现已移除:
+  // 升 medium/high 必须有跨独立源真佐证(corroboratedItems = 同一条被 ≥2 provider 命中)，
+  // fetchedEvidence 仅作展示、不再充当置信度杠杆。
   let confidence = 'low';
   if (upProviderCount >= 3 && corroboratedItems >= 2) {
     confidence = 'high';
-  } else if ((upProviderCount >= 2 && corroboratedItems >= 1) || fetchedEvidence >= 2) {
+  } else if (upProviderCount >= 2 && corroboratedItems >= 1) {
     confidence = 'medium';
   }
   if (!items.length) {

@@ -1,8 +1,9 @@
+import asyncio
 import json
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict
+from datetime import datetime, timedelta, timezone
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 from fastapi import HTTPException
@@ -10,32 +11,75 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.core.config import settings
 
+DEFAULT_BASE_URL = "https://search.sh/api/search"
+
+# search.sh 免费层是 5 次/天/IP：某出口撞 429 就冷却到当天配额重置（约到次日 UTC 0 点）。
+_NODE_FAIL_COOLDOWN = 300.0   # 死/坏出口(502/连接失败)短冷却，节点可能自愈
+_RETRY_BACKOFF = 0.4          # 失败切换之间的小退避
+_MAX_ATTEMPTS = 6             # 单次请求最多切几个出口，兜住延迟
+_PROXY_ERROR_MARKERS = ("upstream request failed", "proxy authentication failed", "bad gateway")
+
+
+def _parse_multivalue(raw: str) -> List[str]:
+    """按换行和 ||| 分隔，strip 并丢空。"""
+    parts: List[str] = []
+    for line in (raw or "").split("\n"):
+        for part in line.split("|||"):
+            stripped = part.strip()
+            if stripped:
+                parts.append(stripped)
+    return parts
+
+
+def _seconds_to_utc_reset() -> float:
+    """距下一个 UTC 0 点的秒数（免费层按天重置的保守冷却时长）。"""
+    now = datetime.now(timezone.utc)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(60.0, (tomorrow - now).total_seconds())
+
 
 class SearchProvider:
-    BASE_URL = "https://search.sh/api/search"
     MODEL_NAME = "search-sh-ai"
     DEFAULT_USER_AGENT = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
     )
 
+    # 跨实例共享的轮询状态（asyncio 单线程，无需锁）
+    _next_index: int = 0
+    _cooldowns: Dict[str, float] = {}  # 轮换值 -> monotonic 冷却截止
+
     def __init__(self):
-        self.headers = {
+        self.base_url = (settings.SEARCH_SH_BASE_URL or "").strip() or DEFAULT_BASE_URL
+        self.rotate_header = (settings.SEARCH_SH_ROTATE_HEADER or "").strip()
+
+        values = _parse_multivalue(settings.SEARCH_SH_ROTATE_VALUES or "")
+        if not values and self.rotate_header:
+            try:
+                count = int(settings.SEARCH_SH_ROTATE_COUNT or 0)
+            except (TypeError, ValueError):
+                count = 0
+            if count > 0:
+                values = [f"r{i}" for i in range(1, count + 1)]
+        # [""] 表示不轮换（单次直连），仍复用同一套失败处理逻辑
+        self.rotate_values: List[str] = values or [""]
+
+        ua_parts = _parse_multivalue(settings.SEARCH_SH_USER_AGENT or "")
+        self.user_agent = ua_parts[0] if ua_parts else self.DEFAULT_USER_AGENT
+
+        self.base_headers = {
             "Accept": "*/*",
             "Accept-Language": "en,zh-CN;q=0.9",
             "Content-Type": "application/json",
             "Origin": "https://search.sh",
             "Referer": "https://search.sh/",
-            "User-Agent": settings.SEARCH_SH_USER_AGENT or self.DEFAULT_USER_AGENT,
-            "Cookie": settings.SEARCH_SH_COOKIE,
+            "User-Agent": self.user_agent,
         }
+        cookie = (settings.SEARCH_SH_COOKIE or "").strip()
+        if cookie:
+            self.base_headers["Cookie"] = cookie
 
     async def handle_chat_completion(self, request_data: Dict[str, Any]) -> StreamingResponse | JSONResponse:
-        if not settings.SEARCH_SH_COOKIE:
-            raise HTTPException(
-                status_code=503,
-                detail="SEARCH_SH_COOKIE is not set. Configure the complete cookie header from search.sh first.",
-            )
         if request_data.get("stream", False):
             return StreamingResponse(self._stream_generator(request_data), media_type="text/event-stream")
         return await self._non_stream_generator(request_data)
@@ -109,39 +153,117 @@ class SearchProvider:
             }
         )
 
+    def _candidate_indices(self) -> List[int]:
+        """轮询起点 + 跳过冷却中的出口，返回本次可试的顺序索引。"""
+        n = len(self.rotate_values)
+        now = time.monotonic()
+        start = SearchProvider._next_index % n
+        SearchProvider._next_index = (start + 1) % n
+        return [
+            (start + offset) % n
+            for offset in range(n)
+            if SearchProvider._cooldowns.get(self.rotate_values[(start + offset) % n], 0.0) <= now
+        ]
+
+    def _cooldown(self, value: str, seconds: float) -> None:
+        SearchProvider._cooldowns[value] = time.monotonic() + seconds
+
     async def _get_response_stream(self, payload: dict) -> AsyncGenerator[Dict[str, Any], None]:
         request_body = {
             "query": self._extract_query(payload),
             "currentDate": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
-        last_answer = ""
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            async with client.stream("POST", self.BASE_URL, headers=self.headers, json=request_body) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data_json = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+        candidates = self._candidate_indices()
+        if not candidates:
+            soonest = min(SearchProvider._cooldowns.values(), default=time.monotonic()) - time.monotonic()
+            raise RuntimeError(
+                f"All {len(self.rotate_values)} search.sh exit(s) are cooling down "
+                f"(rate-limited or unavailable). Retry in ~{max(0.0, soonest):.0f}s."
+            )
 
-                    if "progressText" in data_json:
-                        yield {"type": "status", "content": data_json["progressText"]}
+        last_err: Optional[str] = None
+        for idx in candidates[:_MAX_ATTEMPTS]:
+            value = self.rotate_values[idx]
+            headers = dict(self.base_headers)
+            if self.rotate_header and value:
+                headers[self.rotate_header] = value
 
-                    if "summary" in data_json:
-                        token = data_json["summary"]
-                        if token:
-                            yield {"type": "content", "content": token}
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    async with client.stream("POST", self.base_url, headers=headers, json=request_body) as response:
+                        status = response.status_code
 
-                    if "answer" in data_json:
-                        answer = data_json["answer"]
-                        if isinstance(answer, str) and answer:
-                            delta = answer[len(last_answer):] if answer.startswith(last_answer) else answer
-                            last_answer = answer
-                            if delta:
-                                yield {"type": "content", "content": delta}
+                        if status == 429:  # search.sh 免费层当天 5 次用完 -> 冷却到次日重置
+                            self._cooldown(value, _seconds_to_utc_reset())
+                            last_err = f"exit {value or 'direct'}: 429 free-tier daily limit"
+                            await asyncio.sleep(_RETRY_BACKOFF)
+                            continue
+
+                        if status in (403, 502, 503, 504):  # 坏出口 / 被拦 / 代理 upstream 挂
+                            self._cooldown(value, _NODE_FAIL_COOLDOWN)
+                            last_err = f"exit {value or 'direct'}: HTTP {status}"
+                            await asyncio.sleep(_RETRY_BACKOFF)
+                            continue
+
+                        response.raise_for_status()  # 其它非 2xx 直接冒泡
+
+                        # 2xx：先看首行是否是 resin 明文错误，再进正常 SSE 解析
+                        node_failed = False
+                        checked_first = False
+                        last_answer = ""
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            if not checked_first:
+                                checked_first = True
+                                low = line.strip().lower()
+                                if any(mark in low for mark in _PROXY_ERROR_MARKERS):
+                                    node_failed = True
+                                    break
+                            try:
+                                data_json = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+
+                            if "progressText" in data_json:
+                                yield {"type": "status", "content": data_json["progressText"]}
+
+                            if "summary" in data_json:
+                                token = data_json["summary"]
+                                if token:
+                                    yield {"type": "content", "content": token}
+
+                            if "answer" in data_json:
+                                answer = data_json["answer"]
+                                if isinstance(answer, str) and answer:
+                                    delta = answer[len(last_answer):] if answer.startswith(last_answer) else answer
+                                    last_answer = answer
+                                    if delta:
+                                        yield {"type": "content", "content": delta}
+
+                        if node_failed:
+                            self._cooldown(value, _NODE_FAIL_COOLDOWN)
+                            last_err = f"exit {value or 'direct'}: proxy upstream failed"
+                            await asyncio.sleep(_RETRY_BACKOFF)
+                            continue
+                        return  # 成功读完
+
+            except httpx.HTTPStatusError as exc:
+                code = exc.response.status_code
+                self._cooldown(value, _seconds_to_utc_reset() if code == 429 else _NODE_FAIL_COOLDOWN)
+                last_err = f"exit {value or 'direct'}: HTTP {code}"
+                await asyncio.sleep(_RETRY_BACKOFF)
+                continue
+            except httpx.RequestError as exc:  # 连不上 resin / 出口超时
+                self._cooldown(value, _NODE_FAIL_COOLDOWN)
+                last_err = f"exit {value or 'direct'}: {type(exc).__name__}"
+                await asyncio.sleep(_RETRY_BACKOFF)
+                continue
+
+        raise RuntimeError(
+            f"All tried search.sh exits failed (rate-limited or unavailable). Last: {last_err}"
+        )
 
     def _extract_query(self, payload: dict) -> str:
         messages = payload.get("messages", [])

@@ -25,6 +25,10 @@ const defaultSubviews = {
   status: 'monitoring'
 };
 
+// 只读栏目（无可保存配置）：切进去时隐藏底部保存条
+const READONLY_GROUPS = new Set(['tests', 'status']);
+let currentGroup = 'sources';
+
 const legacyRoutes = {
   libresearch: ['sources', 'libresearch'],
   search2api: ['sources', 'search2api'],
@@ -436,6 +440,10 @@ function setActiveRoute(group, subview, updateHash = true) {
   if (updateHash && window.location.hash !== nextHash) {
     window.history.replaceState(null, '', nextHash);
   }
+  currentGroup = targetGroup;
+  if (!workbench.hidden) {
+    saveBar.hidden = READONLY_GROUPS.has(targetGroup);
+  }
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
@@ -455,7 +463,7 @@ function renderSession(session = {}) {
   const locked = Boolean(session.adminAuthEnabled && !session.adminAuthenticated);
   fields.loginPanel.hidden = !locked;
   workbench.hidden = locked;
-  saveBar.hidden = locked;
+  saveBar.hidden = locked || READONLY_GROUPS.has(currentGroup);
   fields.logoutAdmin.hidden = !session.adminAuthEnabled || locked;
   if (fields.adminAuthState) {
     fields.adminAuthState.textContent = session.adminAuthEnabled ? (session.adminAuthenticated ? '已登录' : '需要登录') : '未启用';

@@ -108,7 +108,7 @@ h1, h2, p { margin: 0; }
    外壳 + 表头
    —————————————————————————————————————————————— */
 .app-shell {
-  width: min(1180px, calc(100vw - 48px));
+  width: min(1280px, calc(100vw - 48px));
   margin: 32px auto 24px;
   min-width: 0;
 }
@@ -355,7 +355,7 @@ h1 {
 
 .content-shell {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   min-width: 0;
@@ -1089,7 +1089,7 @@ input:focus, select:focus, textarea:focus {
 .primary-button:disabled, .soft-button:disabled { cursor: wait; opacity: 0.6; transform: none; }
 
 .output {
-  min-height: 180px;
+  min-height: 80px;
   max-height: 340px;
   overflow: auto;
   margin: 18px 0 0;
@@ -1200,7 +1200,7 @@ input:focus, select:focus, textarea:focus {
 .save-bar {
   position: sticky;
   bottom: 16px;
-  width: min(1180px, calc(100vw - 48px));
+  width: min(1280px, calc(100vw - 48px));
   margin: 4px auto 28px;
   display: flex;
   align-items: center;
@@ -1274,7 +1274,7 @@ input:focus, select:focus, textarea:focus {
    响应式
    —————————————————————————————————————————————— */
 @media (max-width: 1180px) {
-  .content-shell { grid-template-columns: 180px minmax(0, 1fr); gap: 16px; }
+  .content-shell { grid-template-columns: 148px minmax(0, 1fr); gap: 16px; }
   .monitor-head, .monitor-row, .log-toolbar { grid-template-columns: 1fr; }
   .monitor-row-head { display: none; }
   .service-pill { justify-self: start; }

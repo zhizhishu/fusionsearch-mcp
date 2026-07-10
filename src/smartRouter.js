@@ -327,14 +327,22 @@ export async function executeSmartResearch({
   let gapFill = null;
   if (anyEvidence && libre.ok && (pipeline.crossCheck.confidence === 'low' || pipeline.crossCheck.confidence === 'medium')) {
     const confidenceBefore = pipeline.crossCheck.confidence;
-    const baseCategories = config.defaultParams?.categories || 'general';
-    const altCategories = baseCategories.includes('news') ? 'general' : 'news';
+    // 按查询意图选补搜类目, 别再无脑翻去 news 把无关时事拖进来抬高置信度。
+    const intent = inferQueryIntent(query);
+    const altCategories = intent === 'it'
+      ? 'it'
+      : intent === 'news'
+        ? 'news'
+        : (config.defaultParams?.categories || 'general');
+    const gapOverrides = { pageno: '1', categories: altCategories };
+    // 只有时效性查询才套时间窗; 静态技术/知识问题不加 time_range。
+    if (intent === 'news') gapOverrides.time_range = 'week';
     const supplementary = await run('libresearch', `LibreSearch 补搜 (gap-fill ${altCategories})`, async () => {
       const { payload, params } = await executeSearch({
         endpoint: config.searchEndpoint,
         defaultParams: config.defaultParams,
         query,
-        overrides: { pageno: '1', categories: altCategories, time_range: 'year' }
+        overrides: gapOverrides
       });
       return { payload, params };
     });
@@ -411,6 +419,7 @@ export async function executeSmartResearch({
     ok: anyEvidence,
     mode: 'keyword',
     strategy: resolvedStrategy?.id ?? 'fast',
+    summarize: effectiveSummarize,
     query,
     attempts,
     providers: providerMap(attempts),
@@ -468,8 +477,14 @@ export function formatSmartResearchResult(result) {
   }
   if (result.answer) {
     lines.push('', '## 汇总答案', result.answer);
+  } else if (result.summarize === false) {
+    lines.push('', '## 汇总答案', '汇总已按请求关闭 (summarization: disabled)，以下为已取得证据。');
   } else if (result.mode === 'keyword') {
-    lines.push('', '## 汇总答案', 'Grok 未返回汇总，以下为已取得证据。');
+    const grokAttempt = (result.attempts || []).find((attempt) => attempt.provider === 'grok');
+    const reason = grokAttempt
+      ? `Grok 汇总失败（${grokAttempt.message || '未知错误'}）`
+      : 'Grok 未返回汇总';
+    lines.push('', '## 汇总答案', `${reason}，以下为已取得证据。`);
   }
   if (result.pipeline) {
     lines.push('', formatEvidencePipeline(result.pipeline));
@@ -610,6 +625,21 @@ function buildUrlSummaryPrompt({ url, question, content }) {
     'Use only this fetched content unless clearly stating that more evidence is needed.',
     content.slice(0, MAX_CONTENT_FOR_GROK)
   ].join('\n');
+}
+
+// 按查询意图粗分类目: 技术/文档(it) · 时效/新闻(news) · 通用(general)。
+// 供 gap-fill 补搜选类目用——静态技术问题不该被拖去 news 堆里捞无关时事。
+function inferQueryIntent(query = '') {
+  const q = String(query || '').toLowerCase();
+  if (/\b(http|https|api|rfc|sdk|cli|npm|pip|regex|sql|json|yaml|docker|kubernetes|linux|python|javascript|typescript|golang|rust|compiler|error|exception|stack\s?trace|status\s?code)\b/u.test(q)
+      || /协议|标准|规范|文档|报错|异常|函数|方法|接口|参数|配置|编译|源码|算法/u.test(query)) {
+    return 'it';
+  }
+  if (/\b(news|today|tonight|latest|breaking|release|price|stock|market)\b/u.test(q)
+      || /最新|今天|今日|近期|昨天|本周|新闻|发布|上市|价格|行情|股价|排行|排名/u.test(query)) {
+    return 'news';
+  }
+  return 'general';
 }
 
 function normalizeUrl(value = '') {
