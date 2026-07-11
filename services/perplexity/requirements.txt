@@ -1,3 +1,4 @@
+# perplexity(第6源)核心依赖：curl_cffi 指纹伪装 + fastmcp OpenAI 端点，无浏览器
 curl_cffi>=0.5.7
 websocket-client>=1.9.0
 fastmcp>=0.1.0,<3.0.0
