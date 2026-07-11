@@ -60,6 +60,9 @@ const app = createApp({
   grokApiKey: process.env.GROK_API_KEY ?? runtimeConfig.grokApiKey,
   grokModel: process.env.GROK_MODEL ?? runtimeConfig.grokModel,
   grokSystemPrompt: process.env.GROK_SYSTEM_PROMPT ?? runtimeConfig.grokSystemPrompt,
+  perplexityApiUrl: process.env.PERPLEXITY_API_URL ?? runtimeConfig.perplexityApiUrl,
+  perplexityApiKey: process.env.PERPLEXITY_API_KEY ?? runtimeConfig.perplexityApiKey,
+  perplexityModel: process.env.PERPLEXITY_MODEL ?? runtimeConfig.perplexityModel ?? 'perplexity-search',
   tavilyEnabled:
     process.env.TAVILY_ENABLED !== undefined
       ? ['true', '1', 'yes'].includes(process.env.TAVILY_ENABLED.toLowerCase())

@@ -235,7 +235,7 @@ export async function executeSmartResearch({
     }
   };
 
-  const [libre, search2api, tavily] = await Promise.all([
+  const [libre, search2api, tavily, perplexity] = await Promise.all([
     run('libresearch', 'LibreSearch 搜索', async () => {
       const { payload, params } = await executeSearch({
         endpoint: config.searchEndpoint,
@@ -251,7 +251,8 @@ export async function executeSmartResearch({
       return { payload, params };
     }),
     run('search2api', 'Search-2api 答案', () => callSearch2Api(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 90_000) })),
-    run('tavily', 'Tavily Search', () => executeTavilySearchOnly({ config, query, maxResults: effectiveLimit }))
+    run('tavily', 'Tavily Search', () => executeTavilySearchOnly({ config, query, maxResults: effectiveLimit })),
+    run('perplexity', 'Perplexity 答案', () => callPerplexity(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 60_000) }))
   ]);
 
   if (libre.ok) {
@@ -285,6 +286,24 @@ export async function executeSmartResearch({
     const content = `## Tavily\n失败: ${tavily.error}`;
     evidence.push(content);
     evidenceBlocks.push({ provider: 'tavily', title: 'Tavily error', content });
+  }
+
+  if (perplexity.ok) {
+    const content = `## Perplexity\n模型: ${perplexity.value.model}\n\n${perplexity.value.content}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'perplexity', title: 'Perplexity answer', content });
+    if (Array.isArray(perplexity.value.sources) && perplexity.value.sources.length) {
+      sourceGroups.push(perplexity.value.sources.map((s) => ({
+        title: (s && (s.title || s.name)) || (typeof s === 'string' ? s : s?.url) || 'source',
+        url: (s && s.url) || (typeof s === 'string' ? s : ''),
+        provider: 'perplexity'
+      })));
+    }
+  } else if (!/未配置/.test(perplexity.error || '')) {
+    // 未配置(第6源可选)时静默跳过，不给证据流加噪声；真失败才记录
+    const content = `## Perplexity\n失败: ${perplexity.error}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'perplexity', title: 'Perplexity error', content });
   }
 
   let sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);
@@ -508,6 +527,46 @@ export function formatSmartResearchResult(result) {
     lines.push('', '## 内容', result.content);
   }
   return lines.join('\n');
+}
+
+// Perplexity(第6源，可选)：OpenAI 兼容 chat 到内置 perplexity 服务(vendored escapeWu/perplexity-ai)。
+// 未配 PERPLEXITY_API_URL 就抛"未配置"，run() 记 paused、smart_research 静默跳过。
+async function callPerplexity(config, { prompt, model, timeoutMs = 45_000 }) {
+  if (!config.perplexityApiUrl) {
+    throw new Error('未配置 PERPLEXITY_API_URL，跳过 Perplexity');
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${config.perplexityApiUrl.replace(/\/+$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.perplexityApiKey || ''}`
+      },
+      body: JSON.stringify({
+        model: model || config.perplexityModel || 'perplexity-search',
+        messages: [{ role: 'user', content: prompt }],
+        stream: false
+      }),
+      signal: controller.signal
+    });
+    if (!res.ok) {
+      throw new Error(`Perplexity HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content || '';
+    if (!content.trim()) {
+      throw new Error('Perplexity 返回空内容');
+    }
+    return {
+      content: content.trim(),
+      model: data?.model || model || 'perplexity',
+      sources: Array.isArray(data?.sources) ? data.sources : []
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function callSearch2Api(config, { prompt, model = 'search-sh-ai', timeoutMs = DEFAULT_TIMEOUT_MS, stream = true }) {

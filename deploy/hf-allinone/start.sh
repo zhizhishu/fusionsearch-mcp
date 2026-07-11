@@ -135,6 +135,19 @@ PYEOF
 
 start_service "libresearch" "libresearch" sh -c 'cd /usr/local/searxng && /usr/local/searxng/entrypoint.sh'
 start_service "search2api" "search2api" /opt/search2api-venv/bin/uvicorn main:app --app-dir /app/services/search2api --host 127.0.0.1 --port 8000
+
+# perplexity(第6源，可选)：token 配置(账号 cookie)从 HF Secret PERPLEXITY_TOKEN_CONFIG 写成文件，
+# 起 OpenAI 兼容服务(:8001，避开 search2api 的 8000)，并把内部端点导出给下面的 node fusion。
+# 未配 PERPLEXITY_TOKEN_CONFIG 则整段跳过，不影响其它五源。
+if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
+  printf '%s' "$PERPLEXITY_TOKEN_CONFIG" > /app/services/perplexity/token_pool_config.json
+  export PERPLEXITY_API_URL="${PERPLEXITY_API_URL:-http://127.0.0.1:8001/v1}"
+  export PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY:-${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}}"
+  start_service "perplexity" "perplexity" sh -c 'cd /app/services/perplexity && MCP_TOKEN="${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}" /opt/perplexity-venv/bin/python -m perplexity.server --host 127.0.0.1 --port 8001'
+else
+  echo "[fusionsearch] PERPLEXITY_TOKEN_CONFIG 未设，跳过 perplexity(第6源)"
+fi
+
 start_service "fusionsearch" "fusionsearch" node /app/src/server.js
 
 while :; do
