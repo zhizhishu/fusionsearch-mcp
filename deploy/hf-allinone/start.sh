@@ -53,7 +53,7 @@ shutdown() {
 trap 'shutdown 143' INT TERM
 
 # 修补 SearXNG settings（始终执行，与是否配代理无关）：
-#  ① search.method=GET —— 网页端搜索改走 URL query 提交。根因：node 反代 /search 的 POST
+#  ① server.method=GET —— 网页端搜索改走 URL query 提交。根因：node 反代 /search 的 POST
 #     表单 body 没透传到内部 SearXNG，网页端每次搜索都空跑返回首页("输入没反应")；
 #     GET 让 q 进 URL query 绕开(实测 GET/querystring 路径正常)。只改网页表单默认方法，
 #     不影响 MCP libre 路(直连 8080 的 POST 照收)。
@@ -73,8 +73,9 @@ except FileNotFoundError:
     print('[fusionsearch] settings file not found: %s (skip patch)' % path)
     sys.exit(0)
 
-# ① 网页端搜索走 GET(q 进 URL query)，绕开反代不透传 POST body 的问题
-cfg.setdefault('search', {})['method'] = 'GET'
+# ① 网页端搜索表单走 GET(q 进 URL query)，绕开反代不透传 POST body 的问题。
+#    注意：SearXNG 的搜索方法配置键是 server.method(默认 POST)，不是 search.method。
+cfg.setdefault('server', {})['method'] = 'GET'
 
 # ② 引擎出站代理 + 放宽超时(仅当配了 SEARXNG_PROXY_URL)
 proxies = [u.strip() for u in os.environ.get('SEARXNG_PROXY_URL', '').split(',') if u.strip()]
