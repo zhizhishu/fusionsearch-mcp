@@ -16,7 +16,7 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 // Paths that must never be gated: container health, the MCP families (Bearer
 // guarded), legacy SSE endpoints, and the gate's own cover assets + login API.
 const EXEMPT_PATH_RE =
-  /^\/(health$|mcp(\/|$)|libresearch\/mcp|fusion\/mcp|sse(\/|$)|messages(\/|$)|gate(\/|$)|api\/gate\/)/;
+  /^\/(health$|mcp(\/|$)|libresearch\/mcp|fusion\/mcp|sse(\/|$)|messages(\/|$)|gate(\/|$)|api\/gate\/|api\/perplexity\/sync-token$)/;
 
 function safeEqual(left = '', right = '') {
   const leftBuffer = Buffer.from(String(left));

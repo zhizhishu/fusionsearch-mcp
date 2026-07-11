@@ -140,7 +140,12 @@ start_service "search2api" "search2api" /opt/search2api-venv/bin/uvicorn main:ap
 # 起 OpenAI 兼容服务(:8001，避开 search2api 的 8000)，并把内部端点导出给下面的 node fusion。
 # 未配 PERPLEXITY_TOKEN_CONFIG 则整段跳过，不影响其它五源。
 if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
-  printf '%s' "$PERPLEXITY_TOKEN_CONFIG" > /app/services/perplexity/token_pool_config.json
+  # 写 token 池配置(inject_heartbeat.py 可选注入 heart_beat 保活,默认关);py 失败则原样落盘兜底。
+  PPLX_TOKEN_POOL_OUT=/app/services/perplexity/token_pool_config.json \
+    /opt/pplx-venv/bin/python /app/services/perplexity/inject_heartbeat.py \
+    || printf '%s' "$PERPLEXITY_TOKEN_CONFIG" > /app/services/perplexity/token_pool_config.json
+  # 热更内部 admin token(node 的 sync-token 端点热更 Python 池要用同值;node/python 同为子进程共享此 env)
+  export PPLX_ADMIN_TOKEN="${PPLX_ADMIN_TOKEN:-fs-pplx-hotreload-2026}"
   export PERPLEXITY_API_URL="${PERPLEXITY_API_URL:-http://127.0.0.1:8001/v1}"
   export PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY:-${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}}"
   # perplexity 是**可选**第6源：独立自重启 subshell、**绝不加入 pids 监控**——它挂了自己拉起、
@@ -150,6 +155,7 @@ if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
       echo "[fusionsearch] (perplexity) starting perplexity.server on :8001"
       ( cd /app/services/perplexity \
         && MCP_TOKEN="${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}" \
+           SOCKS_PROXY="${PERPLEXITY_SOCKS_PROXY:-${SOCKS_PROXY:-}}" \
            /opt/pplx-venv/bin/python -m perplexity.server --host 127.0.0.1 --port 8001 ) 2>&1
       echo "[fusionsearch] (perplexity) exited status=$?; restart in 20s (不影响核心五源)"
       sleep 20

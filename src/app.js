@@ -3222,6 +3222,70 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
     }
   }));
 
+  // Perplexity token 自动同步端点：油猴脚本从 perplexity.ai 抓 cookie POST 到这里。
+  // 走 EXEMPT_PATH_RE 绕过站点 gate(脚本无 gate cookie)，改用 X-Sync-Token 密钥自守门。
+  // 收到 → 写 HF Secret 持久化 + 热更 Python 池即时生效。session/csrf 明文绝不 log/回显。
+  app.post('/api/perplexity/sync-token', asyncHandler(async (req, res) => {
+    const syncSecret = process.env.PERPLEXITY_SYNC_TOKEN || '';
+    if (!syncSecret) {
+      res.status(503).json({ error: { code: 'SYNC_DISABLED', message: 'PERPLEXITY_SYNC_TOKEN 未配置，同步端点未启用' } });
+      return;
+    }
+    if ((req.get('X-Sync-Token') || '') !== syncSecret) {
+      res.status(401).json({ error: { code: 'BAD_SYNC_TOKEN', message: 'Invalid sync token' } });
+      return;
+    }
+    const sessionToken = typeof req.body?.session_token === 'string' ? req.body.session_token.trim() : '';
+    const csrfToken = typeof req.body?.csrf_token === 'string' ? req.body.csrf_token.trim() : '';
+    const id = (typeof req.body?.id === 'string' && req.body.id.trim()) || 'primary';
+    if (!sessionToken || !csrfToken) {
+      res.status(400).json({ error: { code: 'MISSING_TOKEN', message: 'session_token 和 csrf_token 必填' } });
+      return;
+    }
+    // 合并进现有池 config(保留 heart_beat 等)；单号场景以最新覆盖 tokens。
+    let poolConfig = {};
+    try { poolConfig = JSON.parse(process.env.PERPLEXITY_TOKEN_CONFIG || '{}'); } catch (e) { poolConfig = {}; }
+    if (!poolConfig || typeof poolConfig !== 'object' || Array.isArray(poolConfig)) poolConfig = {};
+    poolConfig.tokens = [{ id, csrf_token: csrfToken, session_token: sessionToken }];
+    const newConfigJson = JSON.stringify(poolConfig);
+    process.env.PERPLEXITY_TOKEN_CONFIG = newConfigJson;
+
+    // 写 HF Secret 持久化(扛容器重启)——照 /api/admin/perplexity/cookie 的真实模式。
+    let hfWritten = false;
+    const spaceId = resolveHfSpaceId(config);
+    const hfToken = resolveHfWriteToken();
+    if (spaceId && hfToken) {
+      try {
+        const results = await writeHfSecrets(config, {
+          token: hfToken,
+          secrets: [{ key: 'PERPLEXITY_TOKEN_CONFIG', value: newConfigJson, description: 'Perplexity token (auto-sync)' }]
+        });
+        hfWritten = Array.isArray(results) && results.every((item) => item.ok);
+      } catch (e) { hfWritten = false; }
+    }
+
+    // 热更 Python token 池 → 当前进程即时生效，不必重启。
+    let hotReloaded = false;
+    const pplxBase = (config.perplexityApiUrl || '').replace(/\/v1\/?$/, '').replace(/\/+$/, '');
+    const pplxAdminToken = process.env.PPLX_ADMIN_TOKEN || '';
+    if (pplxBase && pplxAdminToken) {
+      try {
+        const r = await fetch(pplxBase + '/pool/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Token': pplxAdminToken },
+          body: newConfigJson,
+          signal: createTimeoutSignal(10000)
+        });
+        hotReloaded = r.ok;
+      } catch (e) { hotReloaded = false; }
+    }
+    logEvent('info', 'perplexity', 'token auto-synced via userscript', { id, hfWritten, hotReloaded });
+    res.json({
+      ok: true, id, hfWritten, hotReloaded,
+      note: hotReloaded ? 'cookie 已即时生效' : (hfWritten ? 'cookie 已存 HF Secret，下次重启生效' : 'cookie 已接收但未持久化(检查 HF_WRITE_TOKEN)')
+    });
+  }));
+
   // Perplexity model catalogue (hardcoded — models are defined service-side).
   app.get('/api/admin/perplexity/models', auth.requireAdmin, (_req, res) => {
     res.json({
