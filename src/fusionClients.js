@@ -119,15 +119,17 @@ export async function executeGrokWebSearch({
   assertConfigured(resolved.grokApiUrl, 'Grok API URL 未配置');
   assertConfigured(resolved.grokApiKey, 'Grok API Key 未配置');
 
-  const effectiveModel = model ? applyModelSuffix(model, resolved.grokApiUrl) : resolved.grokModel;
+  // GROK_MODEL 可逗号分隔(优先→降级)，按序试第一个成功的；主模型挂/超时就自动降级下一个。
+  // apiUrl 非 openrouter 时 applyModelSuffix 是 no-op(见其定义)。
+  const modelSource = model ? applyModelSuffix(model, resolved.grokApiUrl) : resolved.grokModel;
+  const modelCandidates = String(modelSource).split(',').map((m) => m.trim()).filter(Boolean);
   const prompt = [
     getLocalTimeContext(),
     query,
     platform ? `\nFocus platforms: ${platform}` : ''
   ].join('\n');
 
-  const payload = {
-    model: effectiveModel,
+  const basePayload = {
     messages: [
       { role: 'system', content: resolved.grokSystemPrompt },
       { role: 'user', content: prompt }
@@ -136,11 +138,31 @@ export async function executeGrokWebSearch({
 
   // Grok 合成默认走流式：token 持续回流，连接不空闲，绕开中转代理 ~60s 空闲掐断长思考请求。
   // 流式握手 / 解析失败或服务端不支持 SSE 时，自动降级为一次性非流式请求，结果与旧版一致。
-  const data = await postChatWithStreamFallback(`${trimSlash(resolved.grokApiUrl)}/chat/completions`, {
-    headers: authHeaders(resolved.grokApiKey),
-    body: payload,
-    timeoutMs
-  });
+  //
+  // 多模型降级共享同一个 timeoutMs 预算：主模型用满预算就不再降级，避免"每个候选各等一遍"
+  // 累积超时撞爆 MCP 客户端 ~60s 硬超时。
+  let data;
+  let lastErr;
+  let usedModel = modelCandidates[0] || resolved.grokModel;
+  const budgetStart = Date.now();
+  for (let i = 0; i < modelCandidates.length; i += 1) {
+    const remaining = timeoutMs - (Date.now() - budgetStart);
+    if (i > 0 && remaining < 3000) break;   // 预算不够再降级了(总不超 timeoutMs)
+    try {
+      data = await postChatWithStreamFallback(`${trimSlash(resolved.grokApiUrl)}/chat/completions`, {
+        headers: authHeaders(resolved.grokApiKey),
+        body: { ...basePayload, model: modelCandidates[i] },
+        timeoutMs: i === 0 ? timeoutMs : Math.max(remaining, 3000)
+      });
+      usedModel = modelCandidates[i];
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (data === undefined) {
+    throw lastErr || new Error('Grok 所有候选模型均失败');
+  }
 
   const rawAnswer = extractChatContent(data);
   const split = splitAnswerAndSources(rawAnswer);
@@ -149,7 +171,7 @@ export async function executeGrokWebSearch({
 
   return {
     content: split.answer || rawAnswer,
-    model: effectiveModel,
+    model: usedModel,
     sources,
     sourcesCount: sources.length
   };

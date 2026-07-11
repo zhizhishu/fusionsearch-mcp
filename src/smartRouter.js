@@ -15,6 +15,9 @@ import { mergeSources } from './sourceCache.js';
 import { resolveSmartStrategy } from './smartStrategies.js';
 
 const DEFAULT_TIMEOUT_MS = 45_000;
+// Grok 总结/汇总的独立短超时：Grok 中转挂/慢时，到点就降级返回抓取原文/证据，别用满整个
+// timeoutMs 干等——那会撞爆 MCP 客户端 ~60s 硬超时，连已抓到的降级内容都拿不到。
+const GROK_SUMMARY_TIMEOUT_MS = 30_000;
 const MAX_CONTENT_FOR_GROK = 12_000;
 
 export function isLikelyUrl(value = '') {
@@ -115,7 +118,7 @@ export async function executeSmartFetch({
         config,
         query: buildFetchSynthesisPrompt({ url: targetUrl, question, content, attempts }),
         extraSources: 0,
-        timeoutMs
+        timeoutMs: Math.min(timeoutMs, GROK_SUMMARY_TIMEOUT_MS)
       });
       answer = result.content;
       recordMonitor(monitor, 'grok', {
@@ -381,7 +384,7 @@ export async function executeSmartResearch({
         config,
         query: buildResearchSynthesisPrompt(pipeline),
         extraSources: 0,
-        timeoutMs
+        timeoutMs: Math.min(timeoutMs, GROK_SUMMARY_TIMEOUT_MS)
       });
       answer = result.content;
       sourceGroups.push(result.sources);
