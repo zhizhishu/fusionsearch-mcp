@@ -7,7 +7,8 @@ const MONITORED_SERVICES = [
   { id: 'search2api', name: 'Search-2api', type: 'chat/api' },
   { id: 'grok', name: 'Grok', type: 'ai/api' },
   { id: 'tavily', name: 'Tavily', type: 'search/fetch/map' },
-  { id: 'firecrawl', name: 'Firecrawl', type: 'scrape/api' }
+  { id: 'firecrawl', name: 'Firecrawl', type: 'scrape/api' },
+  { id: 'perplexity', name: 'Perplexity', type: 'ai/chat' }
 ];
 const PROBE_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -139,7 +140,8 @@ export async function runMonitoringProbe({ config, monitor, force = false }) {
     probeSearch2Api(config, state),
     probeGrok(config, state),
     probeTavily(config, state),
-    probeFirecrawl(config, state)
+    probeFirecrawl(config, state),
+    probePerplexity(config, state)
   ]);
 
   return {
@@ -183,6 +185,7 @@ function isServiceConfigured(id, config, fusion, keyStatus) {
   if (id === 'grok') return Boolean(fusion.grokApiUrl && fusion.hasGrokApiKey);
   if (id === 'tavily') return Boolean(fusion.tavilyEnabled && fusion.hasTavilyCredentials);
   if (id === 'firecrawl') return Boolean(fusion.hasFirecrawlApiKey);
+  if (id === 'perplexity') return Boolean(config.perplexityApiUrl);
   return false;
 }
 
@@ -291,6 +294,49 @@ async function probeFirecrawl(config, monitor) {
     message: 'Firecrawl 已配置；为避免消耗额度，主动探针不执行 Scrape。请用测试页或 smart_fetch 刷新真实状态。',
     source: 'probe'
   });
+}
+
+async function probePerplexity(config, monitor) {
+  if (!config.perplexityApiUrl) {
+    monitor.record('perplexity', { status: 'paused', message: '未配置 PERPLEXITY_API_URL', source: 'probe' });
+    return;
+  }
+  // Derive base URL by stripping trailing /v1 suffix, then probe /pool/status or /health.
+  const base = config.perplexityApiUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+  const startedAt = Date.now();
+  try {
+    const response = await fetchWithTimeout(`${base}/pool/status`, { timeoutMs: 8000 });
+    monitor.record('perplexity', {
+      ok: response.ok,
+      // Treat non-200 as warning rather than down to avoid dragging overall health score.
+      status: response.ok ? 'up' : 'warning',
+      message: response.ok
+        ? 'Perplexity /pool/status 探针通过'
+        : `Perplexity /pool/status 响应 ${response.status}（标为 warning，不计入故障）`,
+      responseTimeMs: Date.now() - startedAt,
+      source: 'probe'
+    });
+  } catch {
+    // Fallback to /health; keep as warning on failure so it doesn't drag down health counts.
+    try {
+      const r2 = await fetchWithTimeout(`${base}/health`, { timeoutMs: 8000 });
+      monitor.record('perplexity', {
+        status: r2.ok ? 'up' : 'warning',
+        message: r2.ok
+          ? 'Perplexity /health 探针通过'
+          : `Perplexity /health 响应 ${r2.status}（标为 warning）`,
+        responseTimeMs: Date.now() - startedAt,
+        source: 'probe'
+      });
+    } catch (fallbackError) {
+      monitor.record('perplexity', {
+        status: 'warning',
+        message: `Perplexity 探针未到达（${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}）`,
+        responseTimeMs: Date.now() - startedAt,
+        source: 'probe'
+      });
+    }
+  }
 }
 
 async function fetchWithTimeout(url, { headers, timeoutMs = 8000 } = {}) {

@@ -108,6 +108,7 @@ const HF_SECRET_OPTIONS = [
   { key: 'TAVILY_MCP_MAP_TOOL', label: 'Tavily MCP map tool override', multiline: false },
   { key: 'FIRECRAWL_API_URL', label: 'Firecrawl API URL', multiline: false },
   { key: 'FIRECRAWL_API_KEY', label: 'Firecrawl API key', multiline: false },
+  { key: 'PERPLEXITY_TOKEN_CONFIG', label: 'Perplexity token config (JSON)', multiline: true },
   { key: 'RUNTIME_CONFIG_PATH', label: 'Runtime config path', multiline: false },
   { key: 'HF_WRITE_TOKEN', label: 'HF write token for future secret edits', multiline: false }
 ];
@@ -204,6 +205,7 @@ const adminConfigUpdateSchema = z.object({
   firecrawlApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
   firecrawlApiKey: z.string().optional(),
   clearFirecrawlApiKey: z.boolean().optional(),
+  perplexityModel: z.string().trim().optional(),
   defaultParams: adminDefaultParamsSchema.optional()
 });
 
@@ -1990,6 +1992,9 @@ export function createApp(userConfig = {}) {
     fusion: getFusionPublicConfig(config),
     keyStatus: buildKeyStatus(config),
     defaultParams: config.defaultParams,
+    perplexityModel: config.perplexityModel,
+    perplexityConfigured: Boolean(config.perplexityApiUrl),
+    perplexityCookieConfigured: Boolean(process.env.PERPLEXITY_TOKEN_CONFIG),
     runtimeConfigPath: runtimeConfigPath ?? null,
     envOverrides: {
       searchEndpoint: Boolean(process.env.SEARCH_ENDPOINT),
@@ -2007,6 +2012,8 @@ export function createApp(userConfig = {}) {
       tavilyMcpUrl: Boolean(process.env.TAVILY_MCP_URL),
       tavilyMcpToken: Boolean(process.env.TAVILY_MCP_TOKEN || process.env.TAVILY_HIKARI_TOKEN),
       firecrawlApiKey: Boolean(process.env.FIRECRAWL_API_KEY),
+      perplexityApiUrl: Boolean(process.env.PERPLEXITY_API_URL),
+      perplexityModel: Boolean(process.env.PERPLEXITY_MODEL),
       hfWriteToken: Boolean(process.env.HF_WRITE_TOKEN),
       hfSpaceId: Boolean(resolveHfSpaceId(config))
     },
@@ -2052,6 +2059,7 @@ export function createApp(userConfig = {}) {
       tavilyMcpMapTool: config.tavilyMcpMapTool,
       firecrawlApiUrl: config.firecrawlApiUrl,
       firecrawlApiKey: config.firecrawlApiKey,
+      perplexityModel: config.perplexityModel,
       defaultParams: config.defaultParams
     });
   };
@@ -2524,6 +2532,9 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       config.firecrawlApiUrl = next.firecrawlApiUrl || DEFAULT_CONFIG.firecrawlApiUrl;
     }
     updateSecret(next.clearFirecrawlApiKey, next.firecrawlApiKey, 'firecrawlApiKey');
+    if (next.perplexityModel !== undefined && next.perplexityModel) {
+      config.perplexityModel = next.perplexityModel;
+    }
     if (next.defaultParams) {
       config.defaultParams = {
         ...config.defaultParams,
@@ -3208,6 +3219,172 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
           error instanceof Error ? error.message : String(error)
         )
       });
+    }
+  }));
+
+  // Perplexity model catalogue (hardcoded — models are defined service-side).
+  app.get('/api/admin/perplexity/models', auth.requireAdmin, (_req, res) => {
+    res.json({
+      ok: true,
+      groups: [
+        {
+          mode: 'pro',
+          label: 'Pro 模式',
+          models: [
+            { id: 'perplexity-search', default: true },
+            { id: 'sonar' },
+            { id: 'gpt-5-4' },
+            { id: 'claude-4-6-sonnet' },
+            { id: 'gemini-3-1-pro' }
+          ]
+        },
+        {
+          mode: 'reasoning',
+          label: 'Reasoning 模式',
+          models: [
+            { id: 'perplexity-thinking' },
+            { id: 'gpt-5-4-thinking' },
+            { id: 'claude-4-6-sonnet-thinking' },
+            { id: 'gemini-3-1-pro-thinking' },
+            { id: 'kimi-k2-thinking' }
+          ]
+        },
+        {
+          mode: 'deep',
+          label: 'Deep Research 模式',
+          models: [
+            { id: 'perplexity-deepsearch', slowWarning: '深度·慢·会撞超时，慎用' }
+          ]
+        }
+      ]
+    });
+  });
+
+  // Perplexity cookie: validate JSON structure and write to HF Secret PERPLEXITY_TOKEN_CONFIG.
+  app.post('/api/admin/perplexity/cookie', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const raw = req.body?.cookieJson;
+    if (!raw || typeof raw !== 'string' || !raw.trim()) {
+      res.status(400).json({ error: { code: 'INVALID_INPUT', message: '请提供 cookieJson 字符串' } });
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.trim());
+    } catch {
+      res.status(400).json({ error: { code: 'INVALID_JSON', message: 'cookieJson 不是合法的 JSON' } });
+      return;
+    }
+
+    if (!Array.isArray(parsed?.tokens) || parsed.tokens.length === 0) {
+      res.status(400).json({
+        error: { code: 'INVALID_STRUCTURE', message: 'cookieJson 须含 {"tokens":[{id,csrf_token,session_token},...]}' }
+      });
+      return;
+    }
+    const missingField = parsed.tokens.some(
+      (token) => !token?.id || !token?.csrf_token || !token?.session_token
+    );
+    if (missingField) {
+      res.status(400).json({
+        error: { code: 'INVALID_TOKEN_FIELDS', message: '每个 token 对象须含 id、csrf_token、session_token 字段' }
+      });
+      return;
+    }
+
+    const spaceId = resolveHfSpaceId(config);
+    if (!spaceId) {
+      res.status(400).json({ error: { code: 'HF_SPACE_ID_MISSING', message: 'HF_SPACE_ID/SPACE_ID 未配置' } });
+      return;
+    }
+    const token = resolveHfWriteToken();
+    if (!token) {
+      res.status(400).json({ error: { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN 未配置，无法写回 HF Secret' } });
+      return;
+    }
+
+    const results = await writeHfSecrets(config, {
+      token,
+      secrets: [{ key: 'PERPLEXITY_TOKEN_CONFIG', value: raw.trim(), description: 'Perplexity token config' }]
+    });
+    const ok = results.every((item) => item.ok);
+    logEvent(ok ? 'info' : 'warn', 'perplexity', 'Perplexity cookie config update finished', {
+      ok,
+      tokenCount: parsed.tokens.length
+    });
+    res.status(ok ? 200 : 502).json({
+      ok,
+      tokenCount: parsed.tokens.length,
+      note: ok ? '已写入 HF Secret PERPLEXITY_TOKEN_CONFIG，需重启 Space 生效。' : 'HF Secret 写入失败，请检查 HF_WRITE_TOKEN。',
+      results
+    });
+  }));
+
+  // Perplexity connectivity test: fire a small chat request and return ok/model/snippet/elapsed.
+  app.post('/api/admin/test/perplexity', auth.requireAdmin, asyncHandler(async (req, res) => {
+    if (!config.perplexityApiUrl) {
+      res.json({ ok: false, error: { message: '未配置 PERPLEXITY_API_URL' } });
+      return;
+    }
+
+    const startedAt = Date.now();
+    const timeout = createTimeoutSignal(ADMIN_TEST_TIMEOUT_MS);
+    const model = req.body?.model || config.perplexityModel || 'perplexity-search';
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (config.perplexityApiKey) headers.Authorization = `Bearer ${config.perplexityApiKey}`;
+      const response = await fetch(`${config.perplexityApiUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: 'who founded Tesla' }],
+          max_tokens: 200
+        }),
+        signal: timeout.signal
+      });
+      const text = await response.text();
+      const elapsed = Date.now() - startedAt;
+      let payload;
+      try { payload = JSON.parse(text); } catch { payload = { text }; }
+      if (!response.ok) {
+        monitoring.record('perplexity', {
+          ok: false,
+          message: `Perplexity 测试响应 ${response.status}`,
+          responseTimeMs: elapsed,
+          source: 'admin-test'
+        });
+        res.json({ ok: false, error: { message: `Perplexity 响应 ${response.status} ${response.statusText}`, body: text.slice(0, 800) } });
+        return;
+      }
+      const snippet = (
+        payload?.choices?.[0]?.message?.content ||
+        payload?.choices?.[0]?.text ||
+        text
+      ).slice(0, 500);
+      monitoring.record('perplexity', {
+        ok: true,
+        message: 'Admin Perplexity 测试通过',
+        responseTimeMs: elapsed,
+        source: 'admin-test'
+      });
+      res.json({ ok: true, model, snippet, elapsed });
+    } catch (error) {
+      monitoring.record('perplexity', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: false,
+        error: formatAdminTestError(
+          error,
+          error instanceof Error ? error.message : String(error)
+        )
+      });
+    } finally {
+      timeout.clear();
     }
   }));
 

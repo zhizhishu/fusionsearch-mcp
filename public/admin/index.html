@@ -101,6 +101,7 @@
               <button class="subnav-item" type="button" data-subview="prompt">系统提示词</button>
               <button class="subnav-item" type="button" data-subview="tavily">Tavily</button>
               <button class="subnav-item" type="button" data-subview="firecrawl">Firecrawl</button>
+              <button class="subnav-item" type="button" data-subview="perplexity">Perplexity</button>
             </div>
             <div class="subnav-group" data-subnav-group="mcp" hidden>
               <button class="subnav-item active" type="button" data-subview="full">Fusion MCP</button>
@@ -371,6 +372,56 @@
                 <input id="firecrawlApiUrl" type="url" autocomplete="off" spellcheck="false" />
               </label>
               <p class="inline-hint">🔑 Firecrawl API Key 到「密钥中心」统一查看 / 修改。</p>
+            </section>
+
+            <section class="panel view-panel" data-group-panel="fusion" data-view-panel="perplexity" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4v5l4 2" /></svg>
+                <h2>Perplexity</h2>
+              </div>
+              <p class="panel-note">接入自部署的 Perplexity 服务。选择默认模型（perplexity-search 无需账号；其余模型需账号 Cookie），并可通过下方区域配置账号 Cookie JSON 写入 HF Secret。</p>
+
+              <label class="field span-2">
+                <span>默认模型</span>
+                <select id="perplexityModelSelect">
+                  <option value="perplexity-search">perplexity-search（默认）</option>
+                </select>
+                <small>模型列表从服务端读取并填充，可直接选择。非默认模型须配置账号 Cookie。</small>
+              </label>
+              <div class="test-row">
+                <button class="primary-button" id="savePerplexityModel" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
+                  保存模型
+                </button>
+                <span class="inline-hint" id="perplexityModelHint">读取模型后选择并保存，立即生效。</span>
+              </div>
+
+              <div class="kv-list compact">
+                <div><span>Cookie 状态</span><strong id="perplexityCookieState">-</strong></div>
+              </div>
+              <label class="field span-2">
+                <span>Cookie JSON（PERPLEXITY_TOKEN_CONFIG）</span>
+                <textarea id="perplexityCookieInput" rows="5" spellcheck="false" autocomplete="off" placeholder='{"tokens":[{"id":"xxx","csrf_token":"yyy","session_token":"zzz"}]}'></textarea>
+                <small>账号 Cookie JSON，含 tokens 数组，每项须有 id、csrf_token、session_token。保存后写入 HF Secret，须重启 Space 才能生效。已配置的明文不回显。</small>
+              </label>
+              <div class="test-row">
+                <button class="primary-button" id="savePerplexityCookie" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></svg>
+                  保存 Cookie
+                </button>
+                <span class="inline-hint" id="perplexityCookieHint">保存后需重启 Space 生效。</span>
+              </div>
+
+              <div class="kv-list compact">
+                <div><span>服务接入状态</span><strong id="perplexityConfiguredState">-</strong></div>
+              </div>
+              <div class="test-row">
+                <button class="soft-button" id="testPerplexity" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+                  测试连通
+                </button>
+                <span class="inline-hint" id="perplexityTestHint">发一个小 query 验证 Perplexity 服务可达并返回内容。</span>
+              </div>
             </section>
 
             <section class="panel view-panel" data-group-panel="mcp" data-view-panel="full" hidden>

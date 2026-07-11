@@ -73,6 +73,13 @@ const fields = {
   tavilyMcpExtractTool: $('#tavilyMcpExtractTool'),
   tavilyMcpMapTool: $('#tavilyMcpMapTool'),
   firecrawlApiUrl: $('#firecrawlApiUrl'),
+  perplexityModelSelect: $('#perplexityModelSelect'),
+  perplexityModelHint: $('#perplexityModelHint'),
+  perplexityCookieInput: $('#perplexityCookieInput'),
+  perplexityCookieState: $('#perplexityCookieState'),
+  perplexityCookieHint: $('#perplexityCookieHint'),
+  perplexityConfiguredState: $('#perplexityConfiguredState'),
+  perplexityTestHint: $('#perplexityTestHint'),
   keyStatusGrid: $('#keyStatusGrid'),
   keyStatusHint: $('#keyStatusHint'),
   categories: $('#categories'),
@@ -435,6 +442,9 @@ function setActiveRoute(group, subview, updateHash = true) {
   if (targetGroup === 'fusion' && targetSubview === 'keys') {
     void loadKeyStatus().catch(() => {});
   }
+  if (targetGroup === 'fusion' && targetSubview === 'perplexity') {
+    void loadPerplexity().catch(() => {});
+  }
 
   const nextHash = `#${targetGroup}:${targetSubview}`;
   if (updateHash && window.location.hash !== nextHash) {
@@ -535,6 +545,17 @@ async function loadConfig() {
   fields.tavilyMcpExtractTool.value = config.fusion?.tavilyMcpExtractTool || '';
   fields.tavilyMcpMapTool.value = config.fusion?.tavilyMcpMapTool || '';
   fields.firecrawlApiUrl.value = config.fusion?.firecrawlApiUrl || 'https://api.firecrawl.dev/v2';
+  if (fields.perplexityModelSelect && config.perplexityModel) {
+    fields.perplexityModelSelect.value = config.perplexityModel;
+  }
+  if (fields.perplexityConfiguredState) {
+    fields.perplexityConfiguredState.textContent = config.perplexityConfigured ? '已配置' : '未配置';
+  }
+  if (fields.perplexityCookieState) {
+    fields.perplexityCookieState.textContent = config.perplexityCookieConfigured
+      ? '已配置（不显示明文）'
+      : '未配置';
+  }
   setStatus('已连接', 'ok');
 }
 
@@ -556,6 +577,7 @@ async function saveConfig() {
     tavilyMcpExtractTool: fields.tavilyMcpExtractTool.value.trim(),
     tavilyMcpMapTool: fields.tavilyMcpMapTool.value.trim(),
     firecrawlApiUrl: fields.firecrawlApiUrl.value.trim(),
+    perplexityModel: fields.perplexityModelSelect?.value.trim() || undefined,
     defaultParams: {
       categories: fields.categories.value,
       language: fields.language.value.trim() || 'auto',
@@ -899,6 +921,91 @@ async function testFirecrawlFetch() {
   setStatus(payload.ok ? 'Firecrawl 正常' : 'Firecrawl 异常', payload.ok ? 'ok' : 'fail');
 }
 
+// Populate the Perplexity model select from the server catalogue and refresh status fields.
+async function loadPerplexity() {
+  const payload = await requestJson('/api/admin/perplexity/models');
+  if (!payload.ok || !fields.perplexityModelSelect) return;
+
+  const currentVal = fields.perplexityModelSelect.value || 'perplexity-search';
+  fields.perplexityModelSelect.innerHTML = '';
+  for (const group of payload.groups || []) {
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = group.label;
+    for (const model of group.models || []) {
+      const opt = document.createElement('option');
+      opt.value = model.id;
+      opt.textContent = model.id + (model.default ? '（默认）' : '') + (model.slowWarning ? `  ⚠ ${model.slowWarning}` : '');
+      optgroup.appendChild(opt);
+    }
+    fields.perplexityModelSelect.appendChild(optgroup);
+  }
+  // Restore previously selected value if still present, else keep the first option.
+  if ([...fields.perplexityModelSelect.options].some((o) => o.value === currentVal)) {
+    fields.perplexityModelSelect.value = currentVal;
+  }
+  if (fields.perplexityModelHint) {
+    fields.perplexityModelHint.textContent = '模型列表已读取，可选择后保存。';
+  }
+}
+
+async function savePerplexityModel() {
+  const model = fields.perplexityModelSelect?.value.trim();
+  if (!model) return;
+  if (fields.perplexityModelHint) fields.perplexityModelHint.textContent = '保存中';
+  const config = await requestJson('/api/admin/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ perplexityModel: model })
+  });
+  if (fields.perplexityModelHint) {
+    fields.perplexityModelHint.textContent = `已保存：${config.perplexityModel || model}`;
+  }
+  setStatus('Perplexity 模型已保存', 'ok');
+}
+
+async function savePerplexityCookie() {
+  const cookieJson = fields.perplexityCookieInput?.value.trim();
+  if (!cookieJson) {
+    if (fields.perplexityCookieHint) fields.perplexityCookieHint.textContent = '请先填写 Cookie JSON。';
+    return;
+  }
+  if (fields.perplexityCookieHint) fields.perplexityCookieHint.textContent = '写入中';
+  const payload = await requestJson('/api/admin/perplexity/cookie', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cookieJson })
+  });
+  if (fields.perplexityCookieInput) fields.perplexityCookieInput.value = '';
+  if (fields.perplexityCookieHint) {
+    fields.perplexityCookieHint.textContent = payload.ok
+      ? `已保存（${payload.tokenCount} 个账号）· 需重启 Space 生效`
+      : `保存失败：${payload.error?.message || '未知错误'}`;
+  }
+  if (payload.ok && fields.perplexityCookieState) {
+    fields.perplexityCookieState.textContent = '已配置（不显示明文）';
+  }
+  setStatus(payload.ok ? 'Cookie 已写入 HF' : 'Cookie 写入失败', payload.ok ? 'ok' : 'fail');
+  renderOutput(payload);
+}
+
+async function testPerplexity() {
+  if (fields.perplexityTestHint) fields.perplexityTestHint.textContent = '测试中';
+  renderOutput('Perplexity 连通测试中...');
+  const model = fields.perplexityModelSelect?.value.trim() || undefined;
+  const payload = await requestJson('/api/admin/test/perplexity', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model })
+  });
+  if (fields.perplexityTestHint) {
+    fields.perplexityTestHint.textContent = payload.ok
+      ? `通过 · ${payload.model} · ${payload.elapsed}ms`
+      : `失败：${payload.error?.message || '未知错误'}`;
+  }
+  renderOutput(payload.ok ? { ok: true, model: payload.model, elapsed: payload.elapsed, snippet: payload.snippet } : payload.error);
+  setStatus(payload.ok ? 'Perplexity 正常' : 'Perplexity 异常', payload.ok ? 'ok' : 'fail');
+}
+
 async function listGrokModels() {
   renderOutput('读取 Grok 模型中...');
   const payload = await requestJson('/api/admin/fusion/models');
@@ -961,6 +1068,9 @@ bindAction('#testFusionMap', testFusionMap);
 bindAction('#listGrokModels', listGrokModels);
 bindAction('#listGrokModelsFromTests', listGrokModels);
 bindAction('#testFirecrawlFetch', testFirecrawlFetch);
+bindAction('#savePerplexityModel', savePerplexityModel);
+bindAction('#savePerplexityCookie', savePerplexityCookie);
+bindAction('#testPerplexity', testPerplexity);
 bindAction('#resetGrokPrompt', async () => {
   fields.grokSystemPrompt.value = defaultGrokSystemPrompt;
   fields.saveHint.textContent = '提示词已恢复，保存后生效';
