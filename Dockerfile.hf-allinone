@@ -29,11 +29,11 @@ RUN python3 -m venv /opt/search2api-venv \
 COPY services/perplexity/requirements.txt ./services/perplexity/requirements.txt
 # --copies：把 python 可执行真复制进 venv，不做 symlink——base 镜像(SearXNG 自带 venv)的
 # python3 若被 symlink 会在最终镜像里断链导致运行时 "bin/python: not found"(status 127)。
-RUN python3 -m venv --copies /opt/perplexity-venv \
-    && ls -la /opt/perplexity-venv/bin/ \
-    && /opt/perplexity-venv/bin/python --version \
-    && /opt/perplexity-venv/bin/pip install --no-cache-dir -r /app/services/perplexity/requirements.txt \
-    && /opt/perplexity-venv/bin/python -c "import curl_cffi, fastmcp, aiohttp, aiohttp_socks, websocket; print('[build] perplexity venv self-check OK')"
+RUN python3 -m venv --copies /opt/pplx-venv \
+    && ls -la /opt/pplx-venv/bin/ \
+    && /opt/pplx-venv/bin/python --version \
+    && /opt/pplx-venv/bin/pip install --no-cache-dir -r /app/services/perplexity/requirements.txt \
+    && /opt/pplx-venv/bin/python -c "import curl_cffi, fastmcp, aiohttp, aiohttp_socks, websocket; print('[build] perplexity venv self-check OK')"
 
 COPY src ./src
 COPY public ./public

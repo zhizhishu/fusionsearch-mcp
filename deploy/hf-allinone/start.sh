@@ -150,7 +150,7 @@ if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
       echo "[fusionsearch] (perplexity) starting perplexity.server on :8001"
       ( cd /app/services/perplexity \
         && MCP_TOKEN="${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}" \
-           /opt/perplexity-venv/bin/python -m perplexity.server --host 127.0.0.1 --port 8001 ) 2>&1
+           /opt/pplx-venv/bin/python -m perplexity.server --host 127.0.0.1 --port 8001 ) 2>&1
       echo "[fusionsearch] (perplexity) exited status=$?; restart in 20s (不影响核心五源)"
       sleep 20
     done
