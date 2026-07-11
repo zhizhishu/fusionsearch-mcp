@@ -450,6 +450,7 @@ FusionSearch MCP 站在这些开源项目和上游服务的肩膀上，特此致
 - **[Search-2api](https://github.com/lza6/Search-2api)**（作者 `lza6`）— search.sh 的 OpenAI-compatible 封装，作为答案型搜索层内置于 `services/search2api`。
 - **[Tavily](https://tavily.com)** — 面向 AI 的搜索 / 抓取 / 站点地图 API。
 - **[Firecrawl](https://firecrawl.dev)** — 网页正文抓取，抓取降级链的一环。
+- **[perplexity-ai](https://github.com/escapeWu/perplexity-ai)**（`escapeWu`，fork of `ESousa97`，MIT）— Perplexity.ai 逆向封装(Pro 账号 cookie → OpenAI 兼容答案)，作为**可选第 6 源**内置于 `services/perplexity`，`smart_research` 并行取证时接入；未配则自动跳过、独立自重启、不影响核心五源。
 - **[Grok / xAI](https://x.ai)**（或任意 OpenAI-compatible 端点）— 证据合成与汇总。
 - **[Model Context Protocol](https://modelcontextprotocol.io)** — MCP 规范与 `@modelcontextprotocol/sdk`，统一工具接入协议。
 
