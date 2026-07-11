@@ -14,19 +14,19 @@ from app.core.config import settings
 DEFAULT_BASE_URL = "https://search.sh/api/search"
 
 # search.sh 免费层是 5 次/天/IP：某出口撞 429 就冷却到当天配额重置（约到次日 UTC 0 点）。
-_NODE_FAIL_COOLDOWN = 300.0   # 死/坏出口(502/连接失败)短冷却，节点可能自愈
-_RETRY_BACKOFF = 0.4          # 失败切换之间的小退避
-_MAX_ATTEMPTS = 5             # 单次请求最多切几个出口，兜住延迟
+#
+# resin 出口池是异质的：同一 token 下不同 X-Resin-Account 落到不同出口 IP(Oracle/印度/台湾住宅…)，
+# 有的快(~9s)、有的慢(~25s)、有的坏(proxy upstream failed / 502)。串行盲选 r1..rN 很容易整批撞坏
+# 导致失败或超时。这里改用【并发竞速】：每批同时打 _RACE_WIDTH 个出口，用第一个成功返回答案的、
+# 取消其余——只要一批里有一个好出口就成，且延迟取最快，把慢/坏节点对冲掉。
+_NODE_FAIL_COOLDOWN = 300.0   # 坏出口(429/5xx/proxy-error/连接失败)冷却，避免短期反复撞同一个
+_RACE_WIDTH = 3               # 每批并发竞速的出口数：同时试 N 个，用最先成功的一个
+_MAX_ATTEMPTS = 9             # 单次请求最多动用几个出口(约 _MAX_ATTEMPTS/_RACE_WIDTH 批)
 _PROXY_ERROR_MARKERS = ("upstream request failed", "proxy authentication failed", "bad gateway")
-# 出口超时调优（要点：别把正在深搜的连接当慢节点切走 —— search.sh 出正文前会持续发
-# progressText 心跳，一切走就换新出口从头等，反而把延迟越滚越大）：
-#   connect 8s   连不上快速判死切走
-#   read 28s     两次读之间容忍 search.sh "思考期"的长静默(httpx 层兜底)
-#   SILENCE 26s  连上后连心跳(progressText)都没有这么久 = 真死，才切
-#   TOTAL 42s    单次请求全局上限(跨所有出口累计)，配合 node 45s 硬超时留 3s 余量
+# 出口超时：connect 8s 连不上快切；read 28s 容忍 search.sh 深搜(正常 8~25s 出答案)；
+# TOTAL 44s 全局封顶(配合 node 45s admin / 60s smart_research 硬超时留余量)。
 _HTTP_TIMEOUT = httpx.Timeout(connect=8.0, read=28.0, write=10.0, pool=8.0)
-_SILENCE_DEADLINE = 26.0
-_TOTAL_DEADLINE = 42.0
+_TOTAL_DEADLINE = 44.0
 
 
 def _parse_multivalue(raw: str) -> List[str]:
@@ -45,6 +45,10 @@ def _seconds_to_utc_reset() -> float:
     now = datetime.now(timezone.utc)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(60.0, (tomorrow - now).total_seconds())
+
+
+class _ExitError(Exception):
+    """单个出口尝试失败（可切换/竞速到下一个）。"""
 
 
 class SearchProvider:
@@ -177,12 +181,74 @@ class SearchProvider:
     def _cooldown(self, value: str, seconds: float) -> None:
         SearchProvider._cooldowns[value] = time.monotonic() + seconds
 
+    async def _fetch_one(self, idx: int, request_body: dict) -> str:
+        """向单个出口发一次完整请求，成功返回答案文本；失败(429/5xx/proxy-error/超时/空)抛 _ExitError。
+
+        竞速用：读到完整答案才算成功，中途被 cancel 时 async with 会关连接、不留悬挂。
+        """
+        value = self.rotate_values[idx]
+        headers = dict(self.base_headers)
+        if self.rotate_header and value:
+            headers[self.rotate_header] = value
+
+        try:
+            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+                async with client.stream("POST", self.base_url, headers=headers, json=request_body) as response:
+                    status = response.status_code
+                    if status == 429:  # 免费层当天 5 次用完 -> 冷却到次日重置
+                        self._cooldown(value, _seconds_to_utc_reset())
+                        raise _ExitError(f"exit {value or 'direct'}: 429 free-tier daily limit")
+                    if status in (403, 502, 503, 504):  # 坏出口 / 被拦 / 代理 upstream 挂
+                        self._cooldown(value, _NODE_FAIL_COOLDOWN)
+                        raise _ExitError(f"exit {value or 'direct'}: HTTP {status}")
+                    response.raise_for_status()
+
+                    parts: List[str] = []
+                    last_answer = ""
+                    checked_first = False
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        if not checked_first:
+                            checked_first = True
+                            if any(mark in line.strip().lower() for mark in _PROXY_ERROR_MARKERS):
+                                self._cooldown(value, _NODE_FAIL_COOLDOWN)
+                                raise _ExitError(f"exit {value or 'direct'}: proxy upstream failed")
+                        try:
+                            data_json = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+
+                        summary = data_json.get("summary")
+                        if summary:
+                            parts.append(summary)
+
+                        answer = data_json.get("answer")
+                        if isinstance(answer, str) and answer:
+                            delta = answer[len(last_answer):] if answer.startswith(last_answer) else answer
+                            last_answer = answer
+                            if delta:
+                                parts.append(delta)
+
+                    text = "".join(parts).strip()
+                    if not text:
+                        self._cooldown(value, _NODE_FAIL_COOLDOWN)
+                        raise _ExitError(f"exit {value or 'direct'}: empty response")
+                    return text
+
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            self._cooldown(value, _seconds_to_utc_reset() if code == 429 else _NODE_FAIL_COOLDOWN)
+            raise _ExitError(f"exit {value or 'direct'}: HTTP {code}")
+        except httpx.RequestError as exc:  # 连不上 resin / 出口读超时
+            self._cooldown(value, _NODE_FAIL_COOLDOWN)
+            raise _ExitError(f"exit {value or 'direct'}: {type(exc).__name__}")
+
     async def _get_response_stream(self, payload: dict) -> AsyncGenerator[Dict[str, Any], None]:
         request_body = {
             "query": self._extract_query(payload),
             "currentDate": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         }
-        req_start = time.monotonic()
 
         candidates = self._candidate_indices()
         if not candidates:
@@ -192,108 +258,53 @@ class SearchProvider:
                 f"(rate-limited or unavailable). Retry in ~{max(0.0, soonest):.0f}s."
             )
 
-        last_err: Optional[str] = None
-        for idx in candidates[:_MAX_ATTEMPTS]:
-            if time.monotonic() - req_start > _TOTAL_DEADLINE:
+        candidates = candidates[:_MAX_ATTEMPTS]
+        req_start = time.monotonic()
+        last_err = "unknown"
+
+        # 分批并发竞速：每批同时打 _RACE_WIDTH 个出口，用第一个成功返回答案的、取消其余；
+        # 一批全失败则换下一批。全局 _TOTAL_DEADLINE 严格封顶(每次 wait 的 timeout=剩余预算)。
+        pos = 0
+        while pos < len(candidates):
+            if _TOTAL_DEADLINE - (time.monotonic() - req_start) <= 0:
                 break
-            value = self.rotate_values[idx]
-            headers = dict(self.base_headers)
-            if self.rotate_header and value:
-                headers[self.rotate_header] = value
-
-            yielded = False  # 该出口一旦吐过内容就不再中途切换，避免与下个出口内容串味
+            batch = candidates[pos:pos + _RACE_WIDTH]
+            pos += _RACE_WIDTH
+            tasks = {asyncio.create_task(self._fetch_one(idx, request_body)) for idx in batch}
+            winner: Optional[str] = None
             try:
-                async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-                    async with client.stream("POST", self.base_url, headers=headers, json=request_body) as response:
-                        status = response.status_code
+                while tasks:
+                    remaining = _TOTAL_DEADLINE - (time.monotonic() - req_start)
+                    if remaining <= 0:
+                        break
+                    done, _pending = await asyncio.wait(
+                        tasks, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if not done:  # 撞到全局时间预算
+                        break
+                    for finished in done:
+                        tasks.discard(finished)
+                        try:
+                            winner = finished.result()
+                            break
+                        except _ExitError as exc:
+                            last_err = str(exc)
+                        except Exception as exc:  # 兜底：非预期错误也别让整批崩
+                            last_err = f"unexpected: {exc}"
+                    if winner:
+                        break
+            finally:
+                for pending in tasks:
+                    pending.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
 
-                        if status == 429:  # search.sh 免费层当天 5 次用完 -> 冷却到次日重置
-                            self._cooldown(value, _seconds_to_utc_reset())
-                            last_err = f"exit {value or 'direct'}: 429 free-tier daily limit"
-                            await asyncio.sleep(_RETRY_BACKOFF)
-                            continue
-
-                        if status in (403, 502, 503, 504):  # 坏出口 / 被拦 / 代理 upstream 挂
-                            self._cooldown(value, _NODE_FAIL_COOLDOWN)
-                            last_err = f"exit {value or 'direct'}: HTTP {status}"
-                            await asyncio.sleep(_RETRY_BACKOFF)
-                            continue
-
-                        response.raise_for_status()  # 其它非 2xx 直接冒泡
-
-                        # 2xx：先看首行是否是 resin 明文错误，再进正常 SSE 解析
-                        node_failed = False
-                        checked_first = False
-                        last_answer = ""
-                        # search.sh 深搜出正文前会持续发 progressText 状态行；只要有心跳就算出口活着，
-                        # 耐心等它出答案，别把正在干活的连接当慢节点切走(切走=换新出口从头等，越滚越慢)。
-                        last_activity = time.monotonic()
-                        async for line in response.aiter_lines():
-                            now = time.monotonic()
-                            over_total = (now - req_start) > _TOTAL_DEADLINE
-                            silent = (now - last_activity) > _SILENCE_DEADLINE
-                            if yielded:
-                                if over_total:
-                                    return  # 已吐部分内容 + 到总上限 -> 截断收尾，不串味不干等
-                            elif over_total or silent:
-                                # 还没吐正文：仅当到全局上限、或长时间连心跳都没有(真死) 才切换出口
-                                node_failed = True
-                                break
-                            if not line:
-                                continue
-                            last_activity = now  # 收到任何非空行(含 progressText 心跳) = 出口还活着
-                            if not checked_first:
-                                checked_first = True
-                                low = line.strip().lower()
-                                if any(mark in low for mark in _PROXY_ERROR_MARKERS):
-                                    node_failed = True
-                                    break
-                            try:
-                                data_json = json.loads(line)
-                            except json.JSONDecodeError:
-                                continue
-
-                            if "progressText" in data_json:
-                                yield {"type": "status", "content": data_json["progressText"]}
-
-                            if "summary" in data_json:
-                                token = data_json["summary"]
-                                if token:
-                                    yielded = True
-                                    yield {"type": "content", "content": token}
-
-                            if "answer" in data_json:
-                                answer = data_json["answer"]
-                                if isinstance(answer, str) and answer:
-                                    delta = answer[len(last_answer):] if answer.startswith(last_answer) else answer
-                                    last_answer = answer
-                                    if delta:
-                                        yielded = True
-                                        yield {"type": "content", "content": delta}
-
-                        if node_failed:
-                            self._cooldown(value, _NODE_FAIL_COOLDOWN)
-                            last_err = f"exit {value or 'direct'}: proxy upstream failed"
-                            await asyncio.sleep(_RETRY_BACKOFF)
-                            continue
-                        return  # 成功读完
-
-            except httpx.HTTPStatusError as exc:
-                code = exc.response.status_code
-                self._cooldown(value, _seconds_to_utc_reset() if code == 429 else _NODE_FAIL_COOLDOWN)
-                last_err = f"exit {value or 'direct'}: HTTP {code}"
-                await asyncio.sleep(_RETRY_BACKOFF)
-                continue
-            except httpx.RequestError as exc:  # 连不上 resin / 出口超时
-                if yielded:  # 已吐过内容，再切会串味 -> 就此收尾，交上游用已得内容
-                    return
-                self._cooldown(value, _NODE_FAIL_COOLDOWN)
-                last_err = f"exit {value or 'direct'}: {type(exc).__name__}"
-                await asyncio.sleep(_RETRY_BACKOFF)
-                continue
+            if winner:
+                yield {"type": "content", "content": winner}
+                return
 
         raise RuntimeError(
-            f"All tried search.sh exits failed (rate-limited or unavailable). Last: {last_err}"
+            f"All raced search.sh exits failed (rate-limited or unavailable). Last: {last_err}"
         )
 
     def _extract_query(self, payload: dict) -> str:
