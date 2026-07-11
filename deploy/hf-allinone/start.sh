@@ -59,10 +59,15 @@ trap 'shutdown 143' INT TERM
 #     不影响 MCP libre 路(直连 8080 的 POST 照收)。
 #  ② 若配了 SEARXNG_PROXY_URL：引擎出站走 resin 代理池绕数据中心 IP 封杀，并放宽
 #     request_timeout(经代理更慢，给足时间)。空则维持直连。
+#  ③ 引擎换血(SEARXNG_ENGINE_TUNING != off 时)：镜像默认关掉了 mojeek/qwant/mwmbl/yep/
+#     presearch/bing 这些对机房 IP 友好的通用引擎，而开着的主力(google/ddg/startpage)恰恰
+#     对机房 IP 最凶、一直被封。这里纯增启那几个友好引擎(只增不减、不动现有引擎)，增加稳定
+#     结果源。出问题设 HF 变量 SEARXNG_ENGINE_TUNING=off + 重启即回退(不必 rebuild)。
 # 失败(路径/yaml 异常)只告警不阻断启动，SearXNG 退回镜像默认(不会比现在更糟)。
-echo "[fusionsearch] patching searxng settings (method=GET; proxies if set)"
+echo "[fusionsearch] patching searxng settings (method=GET; proxies if set; engine tuning)"
 SEARXNG_SETTINGS_FILE="${__SEARXNG_SETTINGS_PATH:-/etc/searxng/settings.yml}" \
 SEARXNG_PROXY_URL="${SEARXNG_PROXY_URL:-}" \
+SEARXNG_ENGINE_TUNING="${SEARXNG_ENGINE_TUNING:-on}" \
   /usr/local/searxng/.venv/bin/python3 - <<'PYEOF' || echo "[fusionsearch] WARN: searxng settings patch failed; using image defaults"
 import os, sys, yaml
 path = os.environ.get('SEARXNG_SETTINGS_FILE', '/etc/searxng/settings.yml')
@@ -85,9 +90,25 @@ if proxies:
     out['request_timeout'] = 10.0
     out['max_request_timeout'] = 20.0
 
+# ③ 引擎换血：增启对机房 IP 友好、但镜像默认禁用的通用引擎(纯增不减，好回退)。
+#    这些引擎名取自线上 /config 实测(SearXNG 内置)，用 disabled=False override 默认。
+tuned = []
+if os.environ.get('SEARXNG_ENGINE_TUNING', 'on').strip().lower() != 'off':
+    tuned = ['mojeek', 'qwant', 'mwmbl', 'yep', 'presearch', 'bing']
+    engines = cfg.get('engines')
+    if not isinstance(engines, list):
+        engines = []
+        cfg['engines'] = engines
+    by_name = {e.get('name'): e for e in engines if isinstance(e, dict) and e.get('name')}
+    for nm in tuned:
+        if nm in by_name:
+            by_name[nm]['disabled'] = False
+        else:
+            engines.append({'name': nm, 'disabled': False})
+
 with open(path, 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
-print('[fusionsearch] searxng settings patched: method=GET, proxies=%d' % len(proxies))
+print('[fusionsearch] searxng settings patched: method=GET, proxies=%d, engines_enabled=%s' % (len(proxies), tuned))
 PYEOF
 
 start_service "libresearch" "libresearch" sh -c 'cd /usr/local/searxng && /usr/local/searxng/entrypoint.sh'
