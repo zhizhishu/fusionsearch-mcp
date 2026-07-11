@@ -16,12 +16,17 @@ DEFAULT_BASE_URL = "https://search.sh/api/search"
 # search.sh 免费层是 5 次/天/IP：某出口撞 429 就冷却到当天配额重置（约到次日 UTC 0 点）。
 _NODE_FAIL_COOLDOWN = 300.0   # 死/坏出口(502/连接失败)短冷却，节点可能自愈
 _RETRY_BACKOFF = 0.4          # 失败切换之间的小退避
-_MAX_ATTEMPTS = 6             # 单次请求最多切几个出口，兜住延迟
+_MAX_ATTEMPTS = 5             # 单次请求最多切几个出口，兜住延迟
 _PROXY_ERROR_MARKERS = ("upstream request failed", "proxy authentication failed", "bad gateway")
-# 出口超时调优：连接 8s / 读 20s 快速判死；连上但 18s 不出内容当慢节点切走。
-_HTTP_TIMEOUT = httpx.Timeout(connect=8.0, read=20.0, write=10.0, pool=8.0)
-_FIRST_TOKEN_DEADLINE = 18.0
-_TOTAL_DEADLINE = 42.0        # 单次请求总上限；已吐内容的慢出口到点截断收尾，未吐的切走
+# 出口超时调优（要点：别把正在深搜的连接当慢节点切走 —— search.sh 出正文前会持续发
+# progressText 心跳，一切走就换新出口从头等，反而把延迟越滚越大）：
+#   connect 8s   连不上快速判死切走
+#   read 28s     两次读之间容忍 search.sh "思考期"的长静默(httpx 层兜底)
+#   SILENCE 26s  连上后连心跳(progressText)都没有这么久 = 真死，才切
+#   TOTAL 42s    单次请求全局上限(跨所有出口累计)，配合 node 45s 硬超时留 3s 余量
+_HTTP_TIMEOUT = httpx.Timeout(connect=8.0, read=28.0, write=10.0, pool=8.0)
+_SILENCE_DEADLINE = 26.0
+_TOTAL_DEADLINE = 42.0
 
 
 def _parse_multivalue(raw: str) -> List[str]:
@@ -220,17 +225,23 @@ class SearchProvider:
                         node_failed = False
                         checked_first = False
                         last_answer = ""
-                        started = time.monotonic()
+                        # search.sh 深搜出正文前会持续发 progressText 状态行；只要有心跳就算出口活着，
+                        # 耐心等它出答案，别把正在干活的连接当慢节点切走(切走=换新出口从头等，越滚越慢)。
+                        last_activity = time.monotonic()
                         async for line in response.aiter_lines():
-                            over_total = (time.monotonic() - req_start) > _TOTAL_DEADLINE
+                            now = time.monotonic()
+                            over_total = (now - req_start) > _TOTAL_DEADLINE
+                            silent = (now - last_activity) > _SILENCE_DEADLINE
                             if yielded:
                                 if over_total:
                                     return  # 已吐部分内容 + 到总上限 -> 截断收尾，不串味不干等
-                            elif over_total or (time.monotonic() - started) > _FIRST_TOKEN_DEADLINE:
+                            elif over_total or silent:
+                                # 还没吐正文：仅当到全局上限、或长时间连心跳都没有(真死) 才切换出口
                                 node_failed = True
                                 break
                             if not line:
                                 continue
+                            last_activity = now  # 收到任何非空行(含 progressText 心跳) = 出口还活着
                             if not checked_first:
                                 checked_first = True
                                 low = line.strip().lower()

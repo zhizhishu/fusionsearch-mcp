@@ -52,26 +52,42 @@ shutdown() {
 
 trap 'shutdown 143' INT TERM
 
-# 注入 SearXNG outgoing.proxies —— 引擎出站走 resin 代理池，绕开搜索引擎对 HF 数据中心 IP 的封杀。
-# SEARXNG_PROXY_URL: 逗号分隔的 socks5:// 列表(经 HF Secret 注入，绝不进公开库)；空则直连、维持现状。
-# 失败(路径/yaml 异常)只告警不阻断启动，SearXNG 退回直连(不会比现在更糟)。
-if [ -n "${SEARXNG_PROXY_URL:-}" ]; then
-  echo "[fusionsearch] injecting outgoing.proxies into searxng settings"
-  SEARXNG_SETTINGS_FILE="${__SEARXNG_SETTINGS_PATH:-/etc/searxng/settings.yml}" \
-    /usr/local/searxng/.venv/bin/python3 - <<'PYEOF' || echo "[fusionsearch] WARN: searxng proxy inject failed; running direct"
+# 修补 SearXNG settings（始终执行，与是否配代理无关）：
+#  ① search.method=GET —— 网页端搜索改走 URL query 提交。根因：node 反代 /search 的 POST
+#     表单 body 没透传到内部 SearXNG，网页端每次搜索都空跑返回首页("输入没反应")；
+#     GET 让 q 进 URL query 绕开(实测 GET/querystring 路径正常)。只改网页表单默认方法，
+#     不影响 MCP libre 路(直连 8080 的 POST 照收)。
+#  ② 若配了 SEARXNG_PROXY_URL：引擎出站走 resin 代理池绕数据中心 IP 封杀，并放宽
+#     request_timeout(经代理更慢，给足时间)。空则维持直连。
+# 失败(路径/yaml 异常)只告警不阻断启动，SearXNG 退回镜像默认(不会比现在更糟)。
+echo "[fusionsearch] patching searxng settings (method=GET; proxies if set)"
+SEARXNG_SETTINGS_FILE="${__SEARXNG_SETTINGS_PATH:-/etc/searxng/settings.yml}" \
+SEARXNG_PROXY_URL="${SEARXNG_PROXY_URL:-}" \
+  /usr/local/searxng/.venv/bin/python3 - <<'PYEOF' || echo "[fusionsearch] WARN: searxng settings patch failed; using image defaults"
 import os, sys, yaml
 path = os.environ.get('SEARXNG_SETTINGS_FILE', '/etc/searxng/settings.yml')
-proxies = [u.strip() for u in os.environ.get('SEARXNG_PROXY_URL', '').split(',') if u.strip()]
-if not proxies:
+try:
+    with open(path) as f:
+        cfg = yaml.safe_load(f) or {}
+except FileNotFoundError:
+    print('[fusionsearch] settings file not found: %s (skip patch)' % path)
     sys.exit(0)
-with open(path) as f:
-    cfg = yaml.safe_load(f) or {}
-cfg.setdefault('outgoing', {})['proxies'] = {'all://': proxies}
+
+# ① 网页端搜索走 GET(q 进 URL query)，绕开反代不透传 POST body 的问题
+cfg.setdefault('search', {})['method'] = 'GET'
+
+# ② 引擎出站代理 + 放宽超时(仅当配了 SEARXNG_PROXY_URL)
+proxies = [u.strip() for u in os.environ.get('SEARXNG_PROXY_URL', '').split(',') if u.strip()]
+if proxies:
+    out = cfg.setdefault('outgoing', {})
+    out['proxies'] = {'all://': proxies}
+    out['request_timeout'] = 10.0
+    out['max_request_timeout'] = 20.0
+
 with open(path, 'w') as f:
     yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
-print('[fusionsearch] searxng outgoing.proxies set: %d proxy(ies)' % len(proxies))
+print('[fusionsearch] searxng settings patched: method=GET, proxies=%d' % len(proxies))
 PYEOF
-fi
 
 start_service "libresearch" "libresearch" sh -c 'cd /usr/local/searxng && /usr/local/searxng/entrypoint.sh'
 start_service "search2api" "search2api" /opt/search2api-venv/bin/uvicorn main:app --app-dir /app/services/search2api --host 127.0.0.1 --port 8000
