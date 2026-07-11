@@ -19,9 +19,9 @@ DEFAULT_BASE_URL = "https://search.sh/api/search"
 # 有的快(~9s)、有的慢(~25s)、有的坏(proxy upstream failed / 502)。串行盲选 r1..rN 很容易整批撞坏
 # 导致失败或超时。这里改用【并发竞速】：每批同时打 _RACE_WIDTH 个出口，用第一个成功返回答案的、
 # 取消其余——只要一批里有一个好出口就成，且延迟取最快，把慢/坏节点对冲掉。
-_NODE_FAIL_COOLDOWN = 300.0   # 坏出口(429/5xx/proxy-error/连接失败)冷却，避免短期反复撞同一个
-_RACE_WIDTH = 3               # 每批并发竞速的出口数：同时试 N 个，用最先成功的一个
-_MAX_ATTEMPTS = 9             # 单次请求最多动用几个出口(约 _MAX_ATTEMPTS/_RACE_WIDTH 批)
+_NODE_FAIL_COOLDOWN = 300.0   # 坏出口(502/proxy-error/连接失败)冷却，避免短期反复撞同一个
+_RACE_WIDTH = 3               # 维持在飞的出口并发数：同时试 N 个，用最先成功的一个
+_MAX_ATTEMPTS = 12            # 单次请求最多动用几个出口(滚动补位，兜配额用尽/坏出口)
 _PROXY_ERROR_MARKERS = ("upstream request failed", "proxy authentication failed", "bad gateway")
 # 出口超时：connect 8s 连不上快切；read 28s 容忍 search.sh 深搜(正常 8~25s 出答案)；
 # TOTAL 44s 全局封顶(配合 node 45s admin / 60s smart_research 硬超时留余量)。
@@ -262,46 +262,53 @@ class SearchProvider:
         req_start = time.monotonic()
         last_err = "unknown"
 
-        # 分批并发竞速：每批同时打 _RACE_WIDTH 个出口，用第一个成功返回答案的、取消其余；
-        # 一批全失败则换下一批。全局 _TOTAL_DEADLINE 严格封顶(每次 wait 的 timeout=剩余预算)。
-        pos = 0
-        while pos < len(candidates):
-            if _TOTAL_DEADLINE - (time.monotonic() - req_start) <= 0:
-                break
-            batch = candidates[pos:pos + _RACE_WIDTH]
-            pos += _RACE_WIDTH
-            tasks = {asyncio.create_task(self._fetch_one(idx, request_body)) for idx in batch}
-            winner: Optional[str] = None
-            try:
-                while tasks:
-                    remaining = _TOTAL_DEADLINE - (time.monotonic() - req_start)
-                    if remaining <= 0:
-                        break
-                    done, _pending = await asyncio.wait(
-                        tasks, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
-                    )
-                    if not done:  # 撞到全局时间预算
-                        break
-                    for finished in done:
-                        tasks.discard(finished)
-                        try:
-                            winner = finished.result()
-                            break
-                        except _ExitError as exc:
-                            last_err = str(exc)
-                        except Exception as exc:  # 兜底：非预期错误也别让整批崩
-                            last_err = f"unexpected: {exc}"
-                    if winner:
-                        break
-            finally:
-                for pending in tasks:
-                    pending.cancel()
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
+        # 滚动补位竞速：维持 _RACE_WIDTH 个出口在飞，任一失败(429/502 都是 1-7s 快速返回)就
+        # 立即补一个新出口进来，用第一个成功返回答案的、取消其余。比"整批等完再换批"更快摸到
+        # 好出口——坏出口秒换、慢出口不阻塞后来者。全局 _TOTAL_DEADLINE 严格封顶。
+        in_flight: Dict[Any, int] = {}   # task -> 出口 idx
+        next_pos = 0
 
-            if winner:
-                yield {"type": "content", "content": winner}
-                return
+        def _launch():
+            nonlocal next_pos
+            while len(in_flight) < _RACE_WIDTH and next_pos < len(candidates):
+                idx = candidates[next_pos]
+                next_pos += 1
+                in_flight[asyncio.create_task(self._fetch_one(idx, request_body))] = idx
+
+        _launch()
+        winner: Optional[str] = None
+        try:
+            while in_flight:
+                remaining = _TOTAL_DEADLINE - (time.monotonic() - req_start)
+                if remaining <= 0:
+                    break
+                done, _pending = await asyncio.wait(
+                    set(in_flight), timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+                )
+                if not done:  # 撞到全局时间预算
+                    break
+                for finished in done:
+                    in_flight.pop(finished, None)
+                    try:
+                        winner = finished.result()
+                        break
+                    except _ExitError as exc:
+                        last_err = str(exc)
+                    except Exception as exc:  # 兜底：非预期错误也别让整轮崩
+                        last_err = f"unexpected: {exc}"
+                if winner:
+                    break
+                _launch()  # 失败的已移除，补新出口维持 _RACE_WIDTH 个在飞
+
+        finally:
+            for pending in in_flight:
+                pending.cancel()
+            if in_flight:
+                await asyncio.gather(*in_flight, return_exceptions=True)
+
+        if winner:
+            yield {"type": "content", "content": winner}
+            return
 
         raise RuntimeError(
             f"All raced search.sh exits failed (rate-limited or unavailable). Last: {last_err}"
