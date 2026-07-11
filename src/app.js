@@ -18,6 +18,7 @@ import {
   executeTavilyExtractOnly,
   executeTavilyFetch,
   executeTavilyMap,
+  executeSmartMap,
   executeTavilySearchOnly,
   fetchAvailableModels,
   getFusionPublicConfig
@@ -1720,7 +1721,7 @@ function createPrecisionTools(server, config, sourceCache, { includeSearch = tru
       async (input) => {
         const parsed = await mapSchema.parseAsync(input);
         try {
-          const result = await executeTavilyMap({ config, ...parsed });
+          const result = await executeSmartMap({ config, ...parsed });
           monitoring?.record('tavily', {
             ok: true,
             message: 'web_map 调用成功',
@@ -3164,7 +3165,7 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
     const input = await adminMapTestSchema.parseAsync(req.body ?? {});
     const startedAt = Date.now();
     try {
-      const result = await executeTavilyMap({ config, ...input, timeout: input.timeout ?? 30 });
+      const result = await executeSmartMap({ config, ...input, timeout: input.timeout ?? 30 });
       monitoring.record('tavily', {
         ok: true,
         message: 'Admin Tavily Map 测试通过',

@@ -299,6 +299,131 @@ export async function executeTavilyMap({
   };
 }
 
+// —— web_map 降级：Tavily map 是单路，挂/空时退到经典站点 URL 发现——
+// sitemap.xml → robots.txt 的 Sitemap 指令 → 首页 anchor 链接。结果为 URL 字符串数组，与 Tavily 一致。
+const MAP_FALLBACK_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+
+async function fetchTextSimple(url, timeoutMs = 15_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': MAP_FALLBACK_UA, Accept: '*/*' },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function extractSitemapLocs(xml) {
+  const urls = [];
+  for (const m of xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)) {
+    urls.push(m[1].trim());
+  }
+  return urls;
+}
+
+async function discoverUrlsFallback(baseUrl, limit = 50, timeoutMs = 15_000) {
+  let origin;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return [];
+  }
+  const found = new Set();
+
+  // sitemap 可能是 index(<loc> 全指向子 .xml) → 递归抓一层子 sitemap
+  const ingestSitemap = async (sm) => {
+    if (found.size >= limit) return;
+    let xml;
+    try {
+      xml = await fetchTextSimple(sm, timeoutMs);
+    } catch {
+      return;
+    }
+    const locs = extractSitemapLocs(xml);
+    const subs = locs.filter((u) => /\.xml(\?|$)/i.test(u));
+    if (subs.length && subs.length === locs.length) {
+      for (const sub of subs.slice(0, 5)) {
+        if (found.size >= limit) break;
+        try {
+          extractSitemapLocs(await fetchTextSimple(sub, timeoutMs)).forEach((u) => found.add(u));
+        } catch {
+          /* skip bad sub-sitemap */
+        }
+      }
+    } else {
+      locs.forEach((u) => found.add(u));
+    }
+  };
+
+  await ingestSitemap(`${origin}/sitemap.xml`);
+
+  if (found.size === 0) {
+    try {
+      const robots = await fetchTextSimple(`${origin}/robots.txt`, timeoutMs);
+      for (const m of robots.matchAll(/^\s*sitemap:\s*(\S+)/gim)) {
+        if (found.size >= limit) break;
+        await ingestSitemap(m[1].trim());
+      }
+    } catch {
+      /* no robots.txt */
+    }
+  }
+
+  if (found.size === 0) {
+    try {
+      const html = await fetchTextSimple(baseUrl, timeoutMs);
+      // 只提 <a> 标签的 href(页面链接)，排除 <link> 的 CSS/favicon；再过滤静态资源后缀
+      for (const m of html.matchAll(/<a\s[^>]*?\bhref\s*=\s*["']([^"'#\s]+)["']/gi)) {
+        if (found.size >= limit) break;
+        try {
+          const abs = new URL(m[1], baseUrl).toString();
+          if (
+            new URL(abs).origin === origin &&
+            !/\.(css|js|ico|png|jpe?g|gif|svg|webp|woff2?|ttf|pdf|zip|mp4|mp3)(\?|$)/i.test(abs)
+          ) {
+            found.add(abs);
+          }
+        } catch {
+          /* skip bad href */
+        }
+      }
+    } catch {
+      /* homepage unreachable */
+    }
+  }
+
+  return [...found].slice(0, limit);
+}
+
+// Tavily map 单路 → 加降级：Tavily 挂/返回空就退到 sitemap/robots/首页发现，给 web_map 兜底。
+export async function executeSmartMap(params) {
+  const { url, limit = 50, timeout = 150 } = params;
+  try {
+    const result = await executeTavilyMap(params);
+    if (Array.isArray(result.results) && result.results.length > 0) {
+      return { ...result, source: 'tavily' };
+    }
+    throw new Error('Tavily map 返回空结果');
+  } catch (error) {
+    const urls = await discoverUrlsFallback(url, limit, Math.min((timeout + 5) * 1000, 30_000));
+    return {
+      baseUrl: url,
+      results: urls,
+      responseTime: null,
+      source: 'fallback',
+      fallbackReason: error instanceof Error ? error.message : String(error),
+      payload: null
+    };
+  }
+}
+
 export async function buildFusionConfigInfo({ config, testConnection = false }) {
   const publicConfig = getFusionPublicConfig(config);
   const info = {
