@@ -24,10 +24,12 @@ COPY services/search2api/requirements.txt ./services/search2api/requirements.txt
 RUN python3 -m venv /opt/search2api-venv \
     && /opt/search2api-venv/bin/pip install --no-cache-dir -r /app/services/search2api/requirements.txt
 
-# perplexity(第6源)独立 venv：curl_cffi 有 manylinux wheel、无需浏览器/编译器
+# perplexity(第6源)独立 venv：curl_cffi 有 manylinux wheel、无需浏览器/编译器。
+# venv 自检(import 关键依赖)：装不上就让 build 当场失败、暴露问题，别拖到运行时 status=127。
 COPY services/perplexity/requirements.txt ./services/perplexity/requirements.txt
 RUN python3 -m venv /opt/perplexity-venv \
-    && /opt/perplexity-venv/bin/pip install --no-cache-dir -r /app/services/perplexity/requirements.txt
+    && /opt/perplexity-venv/bin/pip install --no-cache-dir -r /app/services/perplexity/requirements.txt \
+    && /opt/perplexity-venv/bin/python -c "import curl_cffi, fastmcp, aiohttp, aiohttp_socks, websocket; print('[build] perplexity venv self-check OK')"
 
 COPY src ./src
 COPY public ./public
