@@ -24,6 +24,17 @@ COPY services/search2api/requirements.txt ./services/search2api/requirements.txt
 RUN python3 -m venv /opt/search2api-venv \
     && /opt/search2api-venv/bin/pip install --no-cache-dir -r /app/services/search2api/requirements.txt
 
+# perplexity(第6源)独立 venv：curl_cffi 有 manylinux wheel、无需浏览器/编译器。
+# venv 自检(import 关键依赖)：装不上就让 build 当场失败、暴露问题，别拖到运行时 status=127。
+COPY services/perplexity/requirements.txt ./services/perplexity/requirements.txt
+# --copies：把 python 可执行真复制进 venv，不做 symlink——base 镜像(SearXNG 自带 venv)的
+# python3 若被 symlink 会在最终镜像里断链导致运行时 "bin/python: not found"(status 127)。
+RUN python3 -m venv --copies /opt/pplx-venv \
+    && ls -la /opt/pplx-venv/bin/ \
+    && /opt/pplx-venv/bin/python --version \
+    && /opt/pplx-venv/bin/pip install --no-cache-dir -r /app/services/perplexity/requirements.txt \
+    && /opt/pplx-venv/bin/python -c "import curl_cffi, fastmcp, aiohttp, aiohttp_socks, websocket; print('[build] perplexity venv self-check OK')"
+
 COPY src ./src
 COPY public ./public
 COPY services ./services
