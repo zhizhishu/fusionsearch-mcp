@@ -120,6 +120,7 @@
               <button class="subnav-item" type="button" data-subview="grok-test">Grok</button>
               <button class="subnav-item" type="button" data-subview="tavily-test">Tavily</button>
               <button class="subnav-item" type="button" data-subview="firecrawl-test">Firecrawl</button>
+              <button class="subnav-item" type="button" data-subview="perplexity-test">Perplexity</button>
             </div>
             <div class="subnav-group" data-subnav-group="status" hidden>
               <button class="subnav-item active" type="button" data-subview="monitoring">健康看板</button>
@@ -547,16 +548,27 @@
                 <button class="primary-button" id="testFirecrawlFetch"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 6 12h5l-1 10 8-12h-5l0-8Z" /></svg>Scrape</button>
               </div>
             </section>
+            <section class="panel view-panel" data-group-panel="tests" data-view-panel="perplexity-test" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 4v5l4 2" /></svg><h2>Perplexity 测试</h2></div>
+              <p class="panel-note">发一个小 query 验证 Perplexity 服务可达并返回内容。使用「融合」页配置的默认模型。</p>
+              <div class="test-row">
+                <span class="inline-hint" id="perplexityTestFromTestsHint">点击测试连通性</span>
+                <button class="primary-button" id="testPerplexityFromTests" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+                  测试连通
+                </button>
+              </div>
+            </section>
 
             <section class="panel view-panel" data-group-panel="status" data-view-panel="monitoring" hidden>
               <div class="panel-title">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" /></svg>
                 <h2>健康看板</h2>
               </div>
-              <p class="panel-note">这儿盯着 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 五个服务的状态。平时看最近调用和日志就够，手动体检也有冷却，不会乱花额度。</p>
+              <p class="panel-note">这儿盯着 LibreSearch、Search-2api、Grok、Tavily、Firecrawl、Perplexity 六个服务的状态。每格代表一次自动探针（每 30 分钟一次，最多显示最近 24 小时）。平时看最近调用和日志就够，手动体检也有冷却，不会乱花额度。</p>
               <div class="monitor-head">
                 <div>
-                  <strong id="monitoringCount">5</strong>
+                  <strong id="monitoringCount">6</strong>
                   <span>正在守护的服务</span>
                 </div>
                 <div class="monitor-bars" id="monitorBars"></div>

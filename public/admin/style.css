@@ -75,7 +75,7 @@ body {
   .panel-stage, .panel, .login-panel, .sub-rail, .side-rail, .field, .check-row,
   .field-grid, .provider-switch, .provider-option, .provider-panel, .model-picker,
   .model-card-grid, .model-card, .hf-secret-grid, .key-status-grid, .key-status-card,
-  .monitor-head, .monitor-table, .monitor-row, .log-toolbar, .log-viewer, .log-entry,
+  .monitor-head, .monitor-table, .monitor-row, .uptimer-card, .uptimer-head, .log-toolbar, .log-viewer, .log-entry,
   .kv-list, .test-row, .output, .save-bar) {
   min-width: 0;
   max-width: 100%;
@@ -927,7 +927,7 @@ input:focus, select:focus, textarea:focus {
 
 .monitor-bars {
   display: grid;
-  grid-template-columns: repeat(5, minmax(22px, 1fr));
+  grid-template-columns: repeat(6, minmax(22px, 1fr));
   gap: 7px;
 }
 
@@ -1006,6 +1006,103 @@ input:focus, select:focus, textarea:focus {
   text-align: center;
   font-size: 11.5px;
   font-weight: 700;
+}
+
+/* ——————————————————————————————————————————————
+   Uptimer 历史格子条卡片
+   —————————————————————————————————————————————— */
+.uptimer-card {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-radius: var(--radius-card);
+  background: var(--surface-sunken);
+}
+
+.uptimer-head {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto minmax(38px, auto) minmax(0, 160px);
+  align-items: center;
+  column-gap: 10px;
+}
+
+.uptimer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.uptimer-dot.up    { background: color-mix(in oklch, var(--primary) 82%, white); }
+.uptimer-dot.warning { background: color-mix(in oklch, var(--warn) 80%, white); }
+.uptimer-dot.down  { background: color-mix(in oklch, var(--danger) 78%, white); }
+.uptimer-dot.paused { background: color-mix(in oklch, var(--muted-foreground) 46%, white); }
+
+.uptimer-head strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  color: color-mix(in oklch, var(--foreground) 90%, black);
+}
+
+.uptimer-type {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.uptimer-uptime {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklch, var(--foreground) 80%, black);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.uptimer-check {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  text-align: right;
+}
+
+/* 48 格历史条 */
+.history-grid {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.history-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--border);
+  cursor: default;
+  transition: opacity 0.1s;
+}
+
+.history-cell:hover { opacity: 0.72; }
+
+.history-cell.up      { background: color-mix(in oklch, var(--primary) 82%, white); }
+.history-cell.warning { background: color-mix(in oklch, var(--warn) 80%, white); }
+.history-cell.down    { background: color-mix(in oklch, var(--danger) 78%, white); }
+.history-cell.paused  { background: color-mix(in oklch, var(--muted-foreground) 46%, white); }
+/* .history-cell.empty stays as var(--border) */
+
+.uptimer-msg {
+  min-width: 0;
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 /* ——————————————————————————————————————————————
@@ -1286,7 +1383,7 @@ input:focus, select:focus, textarea:focus {
    —————————————————————————————————————————————— */
 @media (max-width: 1180px) {
   .content-shell { grid-template-columns: 148px minmax(0, 1fr); gap: 16px; }
-  .monitor-head, .monitor-row, .log-toolbar { grid-template-columns: 1fr; }
+  .monitor-head, .monitor-row, .uptimer-head, .log-toolbar { grid-template-columns: 1fr; }
   .monitor-row-head { display: none; }
   .service-pill { justify-self: start; }
   .log-entry-head { grid-template-columns: minmax(52px, auto) minmax(0, 1fr); }
@@ -1328,7 +1425,7 @@ input:focus, select:focus, textarea:focus {
   .panel { padding: 22px; }
 
   .field-grid, .hf-secret-grid, .key-status-grid, .provider-switch,
-  .model-picker-head, .monitor-head, .monitor-row, .test-row { grid-template-columns: 1fr; }
+  .model-picker-head, .monitor-head, .monitor-row, .uptimer-head, .test-row { grid-template-columns: 1fr; }
 
   .model-picker-head { display: grid; }
   .model-picker-head small { text-align: left; }

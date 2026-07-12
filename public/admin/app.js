@@ -342,32 +342,50 @@ function formatKeySource(item) {
 function renderMonitoring(snapshot = {}) {
   const services = snapshot.services || [];
   if (fields.monitoringCount) fields.monitoringCount.textContent = String(snapshot.count ?? services.length);
+
+  // Summary bar: one colored dot per service.
   if (fields.monitorBars) {
     fields.monitorBars.innerHTML = services
       .map((service) => `<span class="monitor-bar ${escapeHtml(service.status)}" title="${escapeHtml(service.name)}: ${escapeHtml(service.statusLabel)}"></span>`)
       .join('');
   }
+
+  // Uptimer-style cards: one card per service with a 48-cell history grid.
   if (fields.monitoringServices) {
-    fields.monitoringServices.innerHTML = services.length
-      ? `
-        <div class="monitor-row monitor-row-head">
-          <span>Service Name</span>
-          <span>Service Type</span>
-          <span>Service Status</span>
-          <span>Last Check</span>
-        </div>
-        ${services.map((service) => `
-          <div class="monitor-row">
-            <strong>${escapeHtml(service.name)}</strong>
-            <span>${escapeHtml(service.type)}</span>
-            <span class="service-pill ${escapeHtml(service.status)}">${escapeHtml(service.statusLabel)}</span>
-            <small>${escapeHtml(formatMonitorCheck(service))}</small>
-            <p>${escapeHtml(service.message || '')}</p>
+    if (!services.length) {
+      fields.monitoringServices.innerHTML = '<div class="empty-note">暂无监控服务</div>';
+    } else {
+      const CELLS = 48;
+      fields.monitoringServices.innerHTML = services.map((service) => {
+        const history = Array.isArray(service.history) ? service.history : [];
+        // Left-pad with empty cells when fewer than 48 data points exist.
+        const padded = Array(Math.max(0, CELLS - history.length)).fill(null).concat(history);
+        const cells = padded.map((point) => {
+          if (!point) {
+            return `<span class="history-cell empty" title="暂无数据"></span>`;
+          }
+          const label = { up: 'Up', down: 'Down', warning: 'Warning', paused: 'Paused' }[point.status] || point.status;
+          const ts = point.ts ? new Date(point.ts).toLocaleString('zh-CN', { hour12: false }) : '';
+          return `<span class="history-cell ${escapeHtml(point.status)}" title="${escapeHtml(ts + (ts ? ' · ' : '') + label)}"></span>`;
+        }).join('');
+        const uptimeText = service.uptime24h == null ? '—' : `${service.uptime24h.toFixed(1)}%`;
+        return `
+          <div class="uptimer-card">
+            <div class="uptimer-head">
+              <span class="uptimer-dot ${escapeHtml(service.status)}" title="${escapeHtml(service.statusLabel)}"></span>
+              <strong>${escapeHtml(service.name)}</strong>
+              <span class="uptimer-type">${escapeHtml(service.type)}</span>
+              <span class="uptimer-uptime">${escapeHtml(uptimeText)}</span>
+              <small class="uptimer-check">${escapeHtml(formatMonitorCheck(service))}</small>
+            </div>
+            <div class="history-grid">${cells}</div>
+            <p class="uptimer-msg">${escapeHtml(service.message || '')}</p>
           </div>
-        `).join('')}
-      `
-      : '<div class="empty-note">暂无监控服务</div>';
+        `;
+      }).join('');
+    }
   }
+
   if (fields.monitoringHint) {
     const counts = snapshot.counts || {};
     const probe = snapshot.probe?.skipped ? `；${snapshot.probe.reason}` : '';
@@ -1071,6 +1089,7 @@ bindAction('#testFirecrawlFetch', testFirecrawlFetch);
 bindAction('#savePerplexityModel', savePerplexityModel);
 bindAction('#savePerplexityCookie', savePerplexityCookie);
 bindAction('#testPerplexity', testPerplexity);
+bindAction('#testPerplexityFromTests', testPerplexity);
 bindAction('#resetGrokPrompt', async () => {
   fields.grokSystemPrompt.value = defaultGrokSystemPrompt;
   fields.saveHint.textContent = '提示词已恢复，保存后生效';

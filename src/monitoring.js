@@ -14,6 +14,10 @@ const PROBE_COOLDOWN_MS = 10 * 60 * 1000;
 
 export function createMonitoringState() {
   const events = new Map();
+  // Per-service history ring buffer: up to MAX_HISTORY points {ts, status}.
+  // 48 points × 30-min auto-probe interval = ~24 h of coverage.
+  const MAX_HISTORY = 48;
+  const histories = new Map(MONITORED_SERVICES.map((s) => [s.id, []]));
   let lastProbeAt = 0;
   return {
     record(serviceId, event = {}) {
@@ -21,6 +25,11 @@ export function createMonitoringState() {
       if (!service) return null;
       const normalized = normalizeMonitorEvent(serviceId, event);
       events.set(serviceId, normalized);
+      // Append to history ring and truncate to MAX_HISTORY.
+      const hist = histories.get(serviceId) ?? [];
+      hist.push({ ts: normalized.checkedAt, status: normalized.status });
+      if (hist.length > MAX_HISTORY) hist.splice(0, hist.length - MAX_HISTORY);
+      histories.set(serviceId, hist);
       logEvent(normalized.status === 'down' ? 'warn' : 'info', 'monitoring', 'Provider status updated', {
         service: serviceId,
         status: normalized.status,
@@ -32,6 +41,25 @@ export function createMonitoringState() {
     },
     get(serviceId) {
       return events.get(serviceId) || null;
+    },
+    getHistory(serviceId) {
+      return histories.get(serviceId) ?? [];
+    },
+    // Returns a plain object {serviceId: [{ts, status},...]} for JSON serialization / Supabase backup.
+    exportHistory() {
+      const obj = {};
+      for (const [id, points] of histories) obj[id] = points;
+      return obj;
+    },
+    // Restores history from a previously exported plain object (e.g. from Supabase on startup).
+    importHistory(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      for (const [id, points] of Object.entries(obj)) {
+        if (histories.has(id) && Array.isArray(points)) {
+          // Accept only the last MAX_HISTORY points per service.
+          histories.set(id, points.slice(-MAX_HISTORY));
+        }
+      }
     },
     getLastProbeAt() {
       return lastProbeAt;
@@ -90,6 +118,7 @@ export function buildMonitoringSnapshot(config = {}, monitor = createMonitoringS
     const last = monitor.get(service.id);
     const status = last?.status || (configured ? 'warning' : 'paused');
     const message = last?.message || (configured ? '已配置，等待最近调用或手动探针确认' : '未配置或已关闭');
+    const hist = monitor.getHistory(service.id);
     return {
       ...service,
       configured,
@@ -98,7 +127,9 @@ export function buildMonitoringSnapshot(config = {}, monitor = createMonitoringS
       message,
       responseTimeMs: last?.responseTimeMs ?? null,
       checkedAt: last?.checkedAt ?? null,
-      source: last?.source || (configured ? 'config' : 'config-missing')
+      source: last?.source || (configured ? 'config' : 'config-missing'),
+      history: hist,
+      uptime24h: computeUptime24h(hist)
     };
   });
   const counts = services.reduce((acc, service) => {
@@ -176,6 +207,18 @@ function statusLabel(status) {
     down: 'Down',
     paused: 'Paused'
   }[status] || 'Warning';
+}
+
+// Computes uptime percentage over the stored history window.
+// Numerator: 'up' points. Denominator: active (non-paused) points.
+// Rationale: 'paused' means the service was not configured/enabled; those periods
+// are excluded so unconfigured gaps don't artificially drag down the percentage.
+// Returns null when no active data exists (nothing to measure).
+function computeUptime24h(history) {
+  const active = history.filter((p) => p.status !== 'paused');
+  if (!active.length) return null;
+  const upCount = active.filter((p) => p.status === 'up').length;
+  return Math.round((upCount / active.length) * 1000) / 10; // one decimal place, e.g. 98.5
 }
 
 function isServiceConfigured(id, config, fusion, keyStatus) {

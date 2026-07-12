@@ -6,6 +6,7 @@ import {
   ensureBucket,
   restoreRuntimeConfig,
   backupRuntimeConfig,
+  restoreMonitorHistory,
   supabaseStoreInfo
 } from './supabaseStore.js';
 
@@ -49,7 +50,7 @@ const resolveTavilyProvider = () => {
   return runtimeConfig.tavilyProvider;
 };
 
-const app = createApp({
+const { app, monitoring } = createApp({
   ...runtimeConfig,
   searchEndpoint: process.env.SEARCH_ENDPOINT ?? runtimeConfig.searchEndpoint,
   serverName: process.env.SERVER_NAME ?? runtimeConfig.serverName,
@@ -98,6 +99,22 @@ const app = createApp({
     }
   }
 });
+
+// Restore monitor history from Supabase before accepting traffic so the 24-h grid
+// is populated immediately after a restart, not just after the first auto-probe.
+if (supabaseEnabled()) {
+  try {
+    const hist = await restoreMonitorHistory();
+    if (hist) {
+      monitoring.importHistory(hist);
+      logEvent('info', 'supabase', 'Monitor history restored from Supabase', {});
+    }
+  } catch (error) {
+    logEvent('warn', 'supabase', 'Monitor history restore failed', {
+      error: String(error?.message || error)
+    });
+  }
+}
 
 app.listen(PORT, () => {
   console.log(`MCP search server listening on port ${PORT}`);

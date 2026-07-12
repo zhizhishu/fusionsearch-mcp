@@ -17,6 +17,7 @@ const RAW_URL = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
 const SERVICE_KEY = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 const BUCKET = (process.env.SUPABASE_BUCKET || 'fusionsearch').trim();
 const OBJECT = (process.env.SUPABASE_OBJECT || 'runtime.json').trim();
+const MONITOR_OBJECT = (process.env.SUPABASE_MONITOR_OBJECT || 'monitor-history.json').trim();
 
 export function supabaseEnabled() {
   return Boolean(RAW_URL && SERVICE_KEY);
@@ -32,6 +33,10 @@ function authHeaders(extra = {}) {
 
 function objectUrl() {
   return `${RAW_URL}/storage/v1/object/${encodeURIComponent(BUCKET)}/${encodeURIComponent(OBJECT)}`;
+}
+
+function monitorObjectUrl() {
+  return `${RAW_URL}/storage/v1/object/${encodeURIComponent(BUCKET)}/${encodeURIComponent(MONITOR_OBJECT)}`;
 }
 
 async function bodyText(res) {
@@ -97,3 +102,30 @@ export async function backupRuntimeConfig(sourcePath) {
 }
 
 export const supabaseStoreInfo = { bucket: BUCKET, object: OBJECT, hasUrl: Boolean(RAW_URL) };
+
+// Download the persisted monitor history object. Returns the parsed object, or null if not stored yet.
+export async function restoreMonitorHistory() {
+  if (!supabaseEnabled()) return null;
+  const res = await fetch(monitorObjectUrl(), { headers: authHeaders({ 'cache-control': 'no-cache' }) });
+  if (res.status === 404 || res.status === 400) return null; // nothing stored yet
+  if (!res.ok) throw new Error(`restoreMonitorHistory ${res.status}: ${await bodyText(res)}`);
+  const body = await res.text();
+  if (!body || !body.trim()) return null;
+  return JSON.parse(body);
+}
+
+// Upload the current monitor history to the bucket (create-or-update). Non-blocking: call .catch() at call site.
+export async function backupMonitorHistory(historyObj) {
+  if (!supabaseEnabled()) return false;
+  const res = await fetch(monitorObjectUrl(), {
+    method: 'POST',
+    headers: authHeaders({
+      'Content-Type': 'application/json',
+      'cache-control': 'no-cache',
+      'x-upsert': 'true'
+    }),
+    body: JSON.stringify(historyObj)
+  });
+  if (!res.ok) throw new Error(`backupMonitorHistory ${res.status}: ${await bodyText(res)}`);
+  return true;
+}

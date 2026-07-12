@@ -30,6 +30,7 @@ import {
   createMonitoringState,
   runMonitoringProbe
 } from './monitoring.js';
+import { supabaseEnabled, backupMonitorHistory } from './supabaseStore.js';
 import {
   executeSmartFetch,
   executeSmartResearch,
@@ -1981,6 +1982,21 @@ export function createApp(userConfig = {}) {
   const sourceCache = new SourceCache();
   const monitoring = createMonitoringState();
 
+  // Auto-probe all sources every 30 minutes so the history ring fills without manual intervention.
+  // force:true bypasses the 10-min manual cooldown; unref so the timer does not block process exit.
+  const _autoProbeTimer = setInterval(() => {
+    runMonitoringProbe({ config, monitor: monitoring, force: true })
+      .then(() => {
+        if (supabaseEnabled()) {
+          backupMonitorHistory(monitoring.exportHistory()).catch((err) =>
+            logEvent('warn', 'supabase', 'Monitor history backup failed', { error: String(err?.message || err) })
+          );
+        }
+      })
+      .catch((err) => logEvent('warn', 'monitoring', 'Scheduled auto-probe failed', { error: String(err?.message || err) }));
+  }, 30 * 60 * 1000);
+  _autoProbeTimer.unref?.();
+
   const publicConfig = () => ({
     serverName: config.serverName,
     serverVersion: config.serverVersion,
@@ -3801,5 +3817,5 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
 
   registerGatewayProxy(app);
 
-  return app;
+  return { app, monitoring };
 }
