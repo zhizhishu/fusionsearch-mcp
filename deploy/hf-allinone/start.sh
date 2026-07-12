@@ -23,6 +23,11 @@ fi
 
 mkdir -p /app/config /app/logs
 
+# 给 admin 静态资源引用打版本号(index.html 里的 BUILD_VER 占位 → 启动时间戳)，防浏览器缓存旧 js/css。
+# 每次 rebuild 会重新 COPY 带 BUILD_VER 的 index.html，这里换成新版本号 → 浏览器普通刷新即拿新资源。
+ASSET_VER="$(date +%s 2>/dev/null || echo 1)"
+sed -i "s/BUILD_VER/${ASSET_VER}/g" /app/public/admin/index.html 2>/dev/null || true
+
 pids=""
 
 start_service() {
