@@ -162,20 +162,6 @@ if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
     done
   ) &
   echo "[fusionsearch] perplexity(第6源) 自重启后台已拉起(独立于核心, 挂了不拖垮)"
-  # perplexity 保活(Playwright)：定期带 cookie 真访问 perplexity.ai 保活 session + 抓 rotation 后新 cookie，
-  # 走 HighPurity 干净出口、经 sync-token 端点持久化。独立后台 loop、不进 pids，挂了不拖垮。
-  # 关：PERPLEXITY_KEEPALIVE=false；间隔：PERPLEXITY_KEEPALIVE_HOURS(默认6)；出口：PERPLEXITY_KEEPALIVE_PROXY(默认复用 SOCKS_PROXY)。
-  if [ "${PERPLEXITY_KEEPALIVE:-true}" = "true" ]; then
-    (
-      sleep 150   # 等 perplexity 服务(:8001)先起来
-      while :; do
-        echo "[fusionsearch] (keepalive) 跑 perplexity session 保活"
-        /opt/pplx-venv/bin/python /app/services/perplexity/keepalive_playwright.py 2>&1 || echo "[keepalive] 退出非0(不影响核心五源)"
-        sleep "$(( ${PERPLEXITY_KEEPALIVE_HOURS:-6} * 3600 ))"
-      done
-    ) &
-    echo "[fusionsearch] perplexity 保活(Playwright) 已拉起, 间隔 ${PERPLEXITY_KEEPALIVE_HOURS:-6}h"
-  fi
 else
   echo "[fusionsearch] PERPLEXITY_TOKEN_CONFIG 未设，跳过 perplexity(第6源)"
 fi
