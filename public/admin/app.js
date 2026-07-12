@@ -274,7 +274,11 @@ const KEY_CENTER_META = {
   tavilyMcpToken: { editable: true, hf: true, clear: true },
   firecrawlApiKey: { editable: true, hf: true, clear: true },
   adminToken: { editable: true, hf: true, clear: false, note: '改后需用新口令重新登录' },
-  mcpAuthToken: { editable: true, hf: true, clear: true }
+  mcpAuthToken: { editable: true, hf: true, clear: true },
+  // resin 代理出口(env-only)：存后需重启生效；masked 只显示平台名+出口数(如 HighPurity ×15)
+  search2apiBaseUrl: { editable: true, hf: true, clear: false, note: 'resin 反代 · 存后需重启 Space 生效' },
+  searxngEngineProxy: { editable: true, hf: true, clear: false, note: 'resin 挑IP引擎出口 · 存后需重启' },
+  searxngProxy: { editable: true, hf: true, clear: false, note: 'resin 全局 fallback · 存后需重启' }
 };
 
 function renderKeyStatus(items = []) {

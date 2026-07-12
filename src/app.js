@@ -111,7 +111,10 @@ const HF_SECRET_OPTIONS = [
   { key: 'FIRECRAWL_API_KEY', label: 'Firecrawl API key', multiline: false },
   { key: 'PERPLEXITY_TOKEN_CONFIG', label: 'Perplexity token config (JSON)', multiline: true },
   { key: 'RUNTIME_CONFIG_PATH', label: 'Runtime config path', multiline: false },
-  { key: 'HF_WRITE_TOKEN', label: 'HF write token for future secret edits', multiline: false }
+  { key: 'HF_WRITE_TOKEN', label: 'HF write token for future secret edits', multiline: false },
+  { key: 'SEARCH_SH_BASE_URL', label: 'Search-2api search.sh 反代 URL (resin, 含平台/出口)', multiline: true },
+  { key: 'SEARXNG_ENGINE_PROXY_URL', label: 'SearXNG 挑IP引擎代理出口 (resin, 逗号分隔)', multiline: true },
+  { key: 'SEARXNG_PROXY_URL', label: 'SearXNG 全局代理 fallback 出口 (resin, 逗号分隔)', multiline: true }
 ];
 const HF_SECRET_KEYS = HF_SECRET_OPTIONS.map((item) => item.key);
 
@@ -132,7 +135,11 @@ const KEY_CENTER_FIELDS = {
   tavilyMcpToken: { configField: 'tavilyMcpToken', hfKey: 'TAVILY_MCP_TOKEN', kind: 'secret' },
   firecrawlApiKey: { configField: 'firecrawlApiKey', hfKey: 'FIRECRAWL_API_KEY', kind: 'secret' },
   adminToken: { configField: 'adminToken', hfKey: 'ADMIN_TOKEN', kind: 'admin' },
-  mcpAuthToken: { configField: 'mcpAuthToken', hfKey: 'MCP_AUTH_TOKEN', kind: 'mcp' }
+  mcpAuthToken: { configField: 'mcpAuthToken', hfKey: 'MCP_AUTH_TOKEN', kind: 'mcp' },
+  // resin 代理出口：env-only(改后写 HF Secret、需重启生效；无 runtime 热更，因 SearXNG 在 start.sh 启动注入)
+  search2apiBaseUrl: { configField: null, hfKey: 'SEARCH_SH_BASE_URL', kind: 'env-only' },
+  searxngEngineProxy: { configField: null, hfKey: 'SEARXNG_ENGINE_PROXY_URL', kind: 'env-only' },
+  searxngProxy: { configField: null, hfKey: 'SEARXNG_PROXY_URL', kind: 'env-only' }
 };
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',

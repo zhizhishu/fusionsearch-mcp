@@ -81,7 +81,11 @@ export function buildKeyStatus(config = {}) {
     secretStatus('tavilyMcpToken', 'Tavily MCP Token', fusion.tavilyMcpToken, ['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN']),
     secretStatus('firecrawlApiKey', 'Firecrawl Key', fusion.firecrawlApiKey, ['FIRECRAWL_API_KEY']),
     secretStatus('adminToken', 'Admin Token', config.adminToken, ['ADMIN_TOKEN']),
-    secretStatus('mcpAuthToken', 'MCP Token', config.mcpAuthToken, ['MCP_AUTH_TOKEN'])
+    secretStatus('mcpAuthToken', 'MCP Token', config.mcpAuthToken, ['MCP_AUTH_TOKEN']),
+    // resin 代理出口(env-only,改后需重启生效)——masked 只显示平台名+出口数,不露 token
+    proxyStatus('search2apiBaseUrl', 'Search-2api 反代 (resin)', process.env.SEARCH_SH_BASE_URL || ''),
+    proxyStatus('searxngEngineProxy', 'SearXNG 挑IP引擎代理 (resin)', process.env.SEARXNG_ENGINE_PROXY_URL || ''),
+    proxyStatus('searxngProxy', 'SearXNG 全局代理 fallback (resin)', process.env.SEARXNG_PROXY_URL || '')
   ];
 }
 
@@ -106,7 +110,10 @@ export function buildKeyReveal(config = {}) {
     tavilyMcpToken: pick(['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN'], fusion.tavilyMcpToken),
     firecrawlApiKey: pick(['FIRECRAWL_API_KEY'], fusion.firecrawlApiKey),
     adminToken: pick(['ADMIN_TOKEN'], config.adminToken),
-    mcpAuthToken: pick(['MCP_AUTH_TOKEN'], config.mcpAuthToken)
+    mcpAuthToken: pick(['MCP_AUTH_TOKEN'], config.mcpAuthToken),
+    search2apiBaseUrl: pick(['SEARCH_SH_BASE_URL'], ''),
+    searxngEngineProxy: pick(['SEARXNG_ENGINE_PROXY_URL'], ''),
+    searxngProxy: pick(['SEARXNG_PROXY_URL'], '')
   };
 }
 
@@ -460,6 +467,26 @@ function cookieStatus(id, label, value) {
       hasCfClearance: hasClearance,
       hasUserAgent: Boolean(process.env.SEARCH_SH_USER_AGENT)
     }
+  };
+}
+
+// resin 代理出口 status：masked 只暴露平台名(HighPurity/Default)+出口数，token 绝不出现。
+// 兼容两种形态：socks5://Platform.account:token@host 与 resin URL-rewrite https://host/TOKEN/Platform/...
+function proxyStatus(id, label, value) {
+  let platforms = [];
+  let outlets = 0;
+  if (value) {
+    const socks = [...value.matchAll(/socks5?:\/\/([A-Za-z0-9_-]+)\./g)].map((m) => m[1]);
+    const rewrite = [...value.matchAll(/https?:\/\/[^/]+\/[0-9a-f]{16,}\/([A-Za-z0-9_-]+)\//g)].map((m) => m[1]);
+    platforms = [...new Set([...socks, ...rewrite])];
+    outlets = (value.match(/socks5?:\/\//g) || []).length;
+  }
+  return {
+    id,
+    label,
+    configured: Boolean(value),
+    masked: value ? (platforms.length ? `${platforms.join(',')}${outlets > 1 ? ` ×${outlets}` : ''}` : 'set') : '',
+    source: value ? 'env' : 'missing'
   };
 }
 
