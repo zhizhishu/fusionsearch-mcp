@@ -35,6 +35,13 @@ RUN python3 -m venv --copies /opt/pplx-venv \
     && /opt/pplx-venv/bin/pip install --no-cache-dir -r /app/services/perplexity/requirements.txt \
     && /opt/pplx-venv/bin/python -c "import curl_cffi, fastmcp, aiohttp, aiohttp_socks, websocket; print('[build] perplexity venv self-check OK')"
 
+# perplexity session 保活用 Playwright(无头 chromium)：定期带 cookie 真访问 perplexity.ai 保活 + 抓 rotation 新 cookie，
+# 走 HighPurity 干净出口(http 正向代理,chromium 支持 http-proxy 认证)。chromium+依赖较大(~400MB)、仅保活用。
+# --with-deps 自动 apt 装 chromium 系统依赖；装不上让 build 当场失败、别拖到运行时。
+RUN /opt/pplx-venv/bin/pip install --no-cache-dir playwright \
+    && /opt/pplx-venv/bin/playwright install --with-deps chromium \
+    && /opt/pplx-venv/bin/python -c "from playwright.sync_api import sync_playwright; print('[build] playwright chromium self-check OK')"
+
 COPY src ./src
 COPY public ./public
 COPY services ./services
