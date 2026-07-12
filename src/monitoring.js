@@ -1,5 +1,5 @@
 import { executeSearch } from './searchClient.js';
-import { fetchAvailableModels, getFusionPublicConfig, resolveFusionConfig } from './fusionClients.js';
+import { fetchAvailableModels, getFusionPublicConfig, resolveFusionConfig, executeTavilySearchOnly, executeFirecrawlFetch } from './fusionClients.js';
 import { logEvent } from './logger.js';
 
 const MONITORED_SERVICES = [
@@ -319,11 +319,25 @@ async function probeTavily(config, monitor) {
     monitor.record('tavily', { status: 'paused', message: 'Tavily 未启用或未配置 Key/Token', source: 'probe' });
     return;
   }
-  monitor.record('tavily', {
-    status: 'warning',
-    message: 'Tavily 已配置；为避免消耗额度，主动探针不发起搜索/抓取。请用测试页或 smart 工具刷新真实状态。',
-    source: 'probe'
-  });
+  // 真测：发起一次轻量 Tavily 搜索(额度充足,主动探针直接打真实请求)。
+  const startedAt = Date.now();
+  try {
+    const result = await executeTavilySearchOnly({ config, query: 'health check', maxResults: 1 });
+    const n = Array.isArray(result?.results) ? result.results.length : 0;
+    monitor.record('tavily', {
+      ok: true,
+      message: `Tavily 搜索探针通过，返回 ${n} 条`,
+      responseTimeMs: Date.now() - startedAt,
+      source: 'probe'
+    });
+  } catch (error) {
+    monitor.record('tavily', {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+      responseTimeMs: Date.now() - startedAt,
+      source: 'probe'
+    });
+  }
 }
 
 async function probeFirecrawl(config, monitor) {
@@ -332,11 +346,25 @@ async function probeFirecrawl(config, monitor) {
     monitor.record('firecrawl', { status: 'paused', message: '未配置 Firecrawl Key', source: 'probe' });
     return;
   }
-  monitor.record('firecrawl', {
-    status: 'warning',
-    message: 'Firecrawl 已配置；为避免消耗额度，主动探针不执行 Scrape。请用测试页或 smart_fetch 刷新真实状态。',
-    source: 'probe'
-  });
+  // 真测：发起一次 Firecrawl 抓取(额度充足,主动探针直接打真实请求)。
+  const startedAt = Date.now();
+  try {
+    const result = await executeFirecrawlFetch({ config, url: 'https://example.com', timeoutMs: 15_000 });
+    const len = result?.content?.length ?? 0;
+    monitor.record('firecrawl', {
+      ok: true,
+      message: `Firecrawl 抓取探针通过，正文 ${len} 字`,
+      responseTimeMs: Date.now() - startedAt,
+      source: 'probe'
+    });
+  } catch (error) {
+    monitor.record('firecrawl', {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+      responseTimeMs: Date.now() - startedAt,
+      source: 'probe'
+    });
+  }
 }
 
 async function probePerplexity(config, monitor) {
