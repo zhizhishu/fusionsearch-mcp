@@ -162,6 +162,17 @@ if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
     done
   ) &
   echo "[fusionsearch] perplexity(第6源) 自重启后台已拉起(独立于核心, 挂了不拖垮)"
+  if [ "${PERPLEXITY_KEEPALIVE:-true}" = "true" ]; then
+    (
+      sleep 150
+      while :; do
+        /opt/pplx-venv/bin/python /app/services/perplexity/keepalive_curlcffi.py 2>&1 \
+          || echo "[fusionsearch] (perplexity) keepalive exited non-zero (ignored)"
+        sleep $(( ${PERPLEXITY_KEEPALIVE_HOURS:-6} * 3600 ))
+      done
+    ) &
+    echo "[fusionsearch] perplexity 保活(curl_cffi) 已拉起, 间隔 ${PERPLEXITY_KEEPALIVE_HOURS:-6}h"
+  fi
 else
   echo "[fusionsearch] PERPLEXITY_TOKEN_CONFIG 未设，跳过 perplexity(第6源)"
 fi
