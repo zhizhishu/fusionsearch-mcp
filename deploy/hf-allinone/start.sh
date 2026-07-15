@@ -182,7 +182,40 @@ else
   echo "[fusionsearch] PERPLEXITY_TOKEN_CONFIG 未设，跳过 perplexity(第6源)"
 fi
 
-start_service "fusionsearch" "fusionsearch" node /app/src/server.js
+# ---- clawemail 邮箱服务(可选，MOUNT_MAIL=on 时启用) ----
+# 合并部署时与 fusion 同容器：clawemail fastify 监听内部 :3100，由 fusion node(app.js)
+# 反代 /email/* 过来(strip 前缀)。独立自重启 subshell、绝不加 pids——邮箱挂了自己拉起、
+# 不拖垮核心搜索；搜索挂了也不影响邮箱。数据靠 clawemail 自身的 Supabase 持久化(不变)。
+# env 隔离：clawemail 继承 Space 全局 SUPABASE_SERVICE_KEY(=邮箱自己的 clawemail_backup key，
+# 改名不动它)，这里只命令级覆盖 PORT+DATABASE_PATH；fusion 主进程另用 FUSION_SUPABASE_SERVICE_KEY
+# 覆盖成 fusionsearch_backup key(见文件末 fusion 启动段)。clawemail 其它配置(CLAW_*/CF_*/AI_*/
+# SUPABASE_URL/ADMIN_PASSWORD)从 Space 全局 env 直接读。邮箱侧 secret 一个不碰。
+if [ "${MOUNT_MAIL:-}" = "on" ] || [ "${MOUNT_MAIL:-}" = "true" ] || [ "${MOUNT_MAIL:-}" = "1" ] || [ "${MOUNT_MAIL:-}" = "yes" ]; then
+  (
+    while :; do
+      echo "[fusionsearch] (clawemail) starting mail service on :${MAIL_PORT:-3100}"
+      ( cd /app/mail \
+        && env PORT="${MAIL_PORT:-3100}" \
+               DATABASE_PATH="${CLAW_DATABASE_PATH:-/app/mail/data/app.db}" \
+               node dist/server/index.js ) 2>&1
+      echo "[fusionsearch] (clawemail) exited status=$?; restart in 10s (不影响搜索)"
+      sleep 10
+    done
+  ) &
+  echo "[fusionsearch] clawemail(邮箱) 自重启后台已拉起(独立于搜索，挂了不拖垮)"
+else
+  echo "[fusionsearch] MOUNT_MAIL 未开，跳过 clawemail 邮箱服务(fusion 独立模式)"
+fi
+
+# fusion 主进程：Supabase 用自己的 key(fusionsearch_backup)。合并部署时 Space 全局
+# SUPABASE_SERVICE_KEY 归邮箱(clawemail key)，fusion 必须用 FUSION_SUPABASE_SERVICE_KEY 命令级
+# 覆盖成自己的；仅在有值时注入(空值别覆盖，否则静默关掉 fusion 持久化)。独立部署没设 FUSION_ 则
+# 继承全局(那时全局本就是 fusion 自己的 key)——同一脚本兼容独立/合并两种部署。
+if [ -n "${FUSION_SUPABASE_SERVICE_KEY:-}" ]; then
+  start_service "fusionsearch" "fusionsearch" env SUPABASE_SERVICE_KEY="$FUSION_SUPABASE_SERVICE_KEY" node /app/src/server.js
+else
+  start_service "fusionsearch" "fusionsearch" node /app/src/server.js
+fi
 
 while :; do
   for pid in $pids; do

@@ -17,3 +17,14 @@ TASK.md
 LOG.md
 PROJECT_MAP.md
 HF_SPACE_CONSOLIDATION_PLAN.md
+
+# 2026-07-14: 剔除 vendored perplexity 未启用的浏览器自动化死代码及其编译残渣，防 HF 反滥用
+# 静态扫描误报。相关源文件已物理删除；连同所有 Python 字节码缓存一并排除，根治二进制残留。
+# ⚠️ emailnator.py 被 client.py 顶层 import(server 启动必经)，绝不能排除，否则服务崩溃循环。
+**/__pycache__
+**/*.pyc
+services/perplexity/perplexity_async
+
+# 2026-07-15: 合并 clawemail — mail/ 子目录的依赖不进 build context(claw-builder 阶段重新 npm ci + build)。
+# 注意只排 node_modules，绝不排 mail/ 整体(Dockerfile.claw-merge 的 claw-builder 要 COPY mail/ 源码)。
+**/node_modules

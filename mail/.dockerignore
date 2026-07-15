@@ -1,0 +1,14 @@
+.git
+.github
+.codex-run
+.claude
+.spec-workflow
+node_modules
+**/node_modules
+参考clawemail/.state-test*
+dist
+data
+npm-debug.log*
+.env
+.env.*
+!.env.example

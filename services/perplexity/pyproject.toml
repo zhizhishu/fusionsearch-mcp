@@ -34,10 +34,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-driver = [
-    "patchright>=1.0.0",
-    "playwright>=1.40.0",
-]
 async = []
 dev = [
     "pytest>=7.4.0",
@@ -49,7 +45,7 @@ dev = [
     "isort>=5.12.0",
 ]
 all = [
-    "perplexity-api[driver,dev]",
+    "perplexity-api[dev]",
 ]
 
 [project.scripts]

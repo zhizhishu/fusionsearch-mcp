@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { randomBytes, randomUUID } from 'crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -2088,6 +2089,25 @@ export function createApp(userConfig = {}) {
   };
 
   const app = express();
+
+  // Optional co-located mail service (clawemail) mount. When MOUNT_MAIL is on,
+  // reverse-proxy /email/* to the mail app on 127.0.0.1:MAIL_PORT, stripping the
+  // /email prefix. Mounted BEFORE express.json (mail app gets the raw request body
+  // untouched) and BEFORE siteGate (the mail app manages its own auth). Default OFF
+  // — fusion still deploys standalone with zero behavior change.
+  if (['true', '1', 'yes', 'on'].includes(String(process.env.MOUNT_MAIL ?? '').toLowerCase())) {
+    const mailTarget = process.env.MAIL_UPSTREAM ?? `http://127.0.0.1:${process.env.MAIL_PORT ?? '3100'}`;
+    app.use(
+      createProxyMiddleware({
+        pathFilter: (pathname) => pathname === '/email' || pathname.startsWith('/email/'),
+        target: mailTarget,
+        changeOrigin: true,
+        ws: true,
+        pathRewrite: (p) => p.replace(/^\/email/, '') || '/'
+      })
+    );
+  }
+
   app.use(express.json());
   app.use(
     cors({
