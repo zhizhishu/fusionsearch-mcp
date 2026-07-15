@@ -45,6 +45,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PATH=/usr/local/bin:$PATH
 ENV GRANIAN_PROCESS_NAME=fusionsearch-libre
+ENV PORT=3000
 
 # node 22 二进制 + 全局 npm/npx
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
