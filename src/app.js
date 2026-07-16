@@ -2092,39 +2092,39 @@ export function createApp(userConfig = {}) {
   const app = express();
 
   // Optional co-located mail service (clawemail) mount. When MOUNT_MAIL is on,
-  // reverse-proxy /email/* to the mail app on 127.0.0.1:MAIL_PORT, stripping the
-  // /email prefix. Mounted BEFORE express.json (mail app gets the raw request body
+  // reverse-proxy /clawemail/* to the mail app on 127.0.0.1:MAIL_PORT, stripping the
+  // /clawemail prefix. Mounted BEFORE express.json (mail app gets the raw request body
   // untouched) and BEFORE siteGate (the mail app manages its own auth). Default OFF
   // — fusion still deploys standalone with zero behavior change.
   if (['true', '1', 'yes', 'on'].includes(String(process.env.MOUNT_MAIL ?? '').toLowerCase())) {
     const mailTarget = process.env.MAIL_UPSTREAM ?? `http://127.0.0.1:${process.env.MAIL_PORT ?? '3100'}`;
     app.use(
       createProxyMiddleware({
-        pathFilter: (pathname) => pathname === '/email' || pathname.startsWith('/email/'),
+        pathFilter: (pathname) => pathname === '/clawemail' || pathname.startsWith('/clawemail/'),
         target: mailTarget,
         changeOrigin: true,
         ws: true,
-        pathRewrite: (p) => p.replace(/^\/email/, '') || '/'
+        pathRewrite: (p) => p.replace(/^\/clawemail/, '') || '/'
       })
     );
   }
 
-  // Optional co-located CloudSpace subscription stack (Sub-Store) mount. When
-  // MOUNT_SUBSTORE is on, reverse-proxy /cloud/* to the CloudSpace access gateway on
-  // 127.0.0.1:SUBSTORE_GATEWAY_PORT. Unlike /email, the /cloud prefix is NOT stripped:
-  // the gateway runs with CLOUDSPACE_MOUNT_PREFIX=/cloud and rewrites the frontend
-  // asset/API/redirect/lock paths under /cloud itself. Mounted BEFORE express.json (the
+  // Optional co-located CloudSpace subscription stack mount. When
+  // MOUNT_SUBSTORE is on, reverse-proxy /cloudspace/* to the CloudSpace access gateway on
+  // 127.0.0.1:SUBSTORE_GATEWAY_PORT. Unlike /clawemail, the /cloudspace prefix is NOT stripped:
+  // the gateway runs with CLOUDSPACE_MOUNT_PREFIX=/cloudspace and rewrites the frontend
+  // asset/API/redirect/lock paths under /cloudspace itself. Mounted BEFORE express.json (the
   // stack streams large request bodies + SSE and manages its own body parsing) and BEFORE
   // siteGate (it has its own access lock). Default OFF — fusion still deploys unchanged.
   if (['true', '1', 'yes', 'on'].includes(String(process.env.MOUNT_SUBSTORE ?? '').toLowerCase())) {
     const cloudTarget = process.env.SUBSTORE_UPSTREAM ?? `http://127.0.0.1:${process.env.SUBSTORE_GATEWAY_PORT ?? '7861'}`;
     app.use(
       createProxyMiddleware({
-        pathFilter: (pathname) => pathname === '/cloud' || pathname.startsWith('/cloud/'),
+        pathFilter: (pathname) => pathname === '/cloudspace' || pathname.startsWith('/cloudspace/'),
         target: cloudTarget,
         changeOrigin: true,
         ws: true
-        // No pathRewrite: forward the /cloud prefix intact (the gateway is mount-aware).
+        // No pathRewrite: forward the /cloudspace prefix intact (the gateway is mount-aware).
       })
     );
   }
@@ -2179,6 +2179,16 @@ export function createApp(userConfig = {}) {
   app.use('/admin/assets', express.static(ADMIN_DIR));
 
   app.get(['/admin', '/admin/'], (_req, res) => {
+    res.sendFile(path.join(ADMIN_DIR, 'index.html'));
+  });
+
+  // Symmetric public entry for the three-in-one nav (/clawemail, /cloudspace,
+  // /fusionsearch-mcp): serve the same admin/search UI as /admin (kept intact for
+  // compatibility). No redirect — the URL stays /fusionsearch-mcp. index.html
+  // references its assets absolutely (/admin/assets/*) and the frontend routes off
+  // location.hash, so the identical page needs no <base> tag or asset alias here.
+  // Mounted after siteGate.middleware so it's guarded by the cover page like /admin.
+  app.get(['/fusionsearch-mcp', '/fusionsearch-mcp/'], (_req, res) => {
     res.sendFile(path.join(ADMIN_DIR, 'index.html'));
   });
 

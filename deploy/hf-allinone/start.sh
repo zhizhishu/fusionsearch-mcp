@@ -1,6 +1,30 @@
 #!/bin/sh
 set -eu
 
+# ============================================================================
+# 合并部署(claw 三合一) cloudspace 订阅栈的 Supabase 备份 —— 环境变量约定
+# ----------------------------------------------------------------------------
+# 本脚本是 PID1 编排器。下方 cloudspace 子壳是 POSIX subshell `( ... env A=b sh
+# /opt/app/start.sh )`：subshell 继承父 shell(=PID1)的全部环境，容器全局变量
+# (docker -e / HF Secret/Variable 注入的)对 PID1 而言已在进程环境里、会自动逐层
+# 向下继承；`env A=b cmd` 只是在现有环境上追加/覆盖 A(无 -i、不清空环境)。
+# 故 cloudspace 子壳本来就能读到 Space 全局配的下列变量——脚本无需再显式透传。
+#
+# ⚠ 但 cloudspace 用的 Supabase 变量名与邮箱/fusion 不同，别指望全局那把 KEY：
+#   · 全局 SUPABASE_SERVICE_KEY 是邮箱(clawemail)的，cloudspace 不读它；
+#   · fusion 主进程用 FUSION_SUPABASE_SERVICE_KEY 覆盖(见文件末)；
+#   · cloudspace 的 supabase_backup_enabled() 要下面四条全满足才启用备份，
+#     否则静默 no-op、订阅数据不落盘/不可恢复：
+#       ① SUPABASE_BACKUP_ENABLED=true
+#       ② SUPABASE_URL
+#       ③ SUPABASE_SERVICE_ROLE_KEY   (注意是 ROLE_KEY，不是 SERVICE_KEY)
+#       ④ SUPABASE_STORAGE_BUCKET
+#     另建议配 SUPABASE_STORAGE_OBJECT / SUPABASE_DAILY_BACKUP_PREFIX 做路径隔离
+#     (与旧 Space 分开写，避免 storage 对象互相覆盖)。
+#   → 启用 MOUNT_SUBSTORE 的合并部署，务必在 Space 全局把以上变量都配齐；下方
+#     MOUNT_SUBSTORE 分支会在缺 SUPABASE_SERVICE_ROLE_KEY 时打 WARN 便于上线即察觉。
+# ============================================================================
+
 export PORT="${PORT:-1666}"
 export NODE_ENV="${NODE_ENV:-production}"
 export RUNTIME_CONFIG_PATH="${RUNTIME_CONFIG_PATH:-/app/config/runtime.json}"
@@ -187,7 +211,7 @@ fi
 
 # ---- clawemail 邮箱服务(可选，MOUNT_MAIL=on 时启用) ----
 # 合并部署时与 fusion 同容器：clawemail fastify 监听内部 :3100，由 fusion node(app.js)
-# 反代 /email/* 过来(strip 前缀)。独立自重启 subshell、绝不加 pids——邮箱挂了自己拉起、
+# 反代 /clawemail/* 过来(strip 前缀)。独立自重启 subshell、绝不加 pids——邮箱挂了自己拉起、
 # 不拖垮核心搜索；搜索挂了也不影响邮箱。数据靠 clawemail 自身的 Supabase 持久化(不变)。
 # env 隔离：clawemail 继承 Space 全局 SUPABASE_SERVICE_KEY(=邮箱自己的 clawemail_backup key，
 # 改名不动它)，这里只命令级覆盖 PORT+DATABASE_PATH；fusion 主进程另用 FUSION_SUPABASE_SERVICE_KEY
@@ -212,8 +236,8 @@ fi
 
 # ---- CloudSpace 订阅栈(可选，MOUNT_SUBSTORE=on 时启用) ----
 # 合并部署时与 fusion 同容器：cloudspace 自带网关(access-proxy)监听内部 :7861，由 fusion
-# node(app.js)反代 /cloud/* 过来(保留 /cloud 前缀，网关按 CLOUDSPACE_MOUNT_PREFIX=/cloud 感知,
-# 自行把前端 API/重定向/锁屏路径挂到 /cloud 下)。直接调用 cloudspace 自己的 supervisor
+# node(app.js)反代 /cloudspace/* 过来(保留 /cloudspace 前缀，网关按 CLOUDSPACE_MOUNT_PREFIX=/cloudspace
+# 感知,自行把前端 API/重定向/锁屏路径挂到 /cloudspace 下)。直接调用 cloudspace 自己的 supervisor
 # (/opt/app/start.sh)，让它管好自己那套进程(网关 + Cumulus 底核 + Cirrus 内核/http-meta +
 # Stratus 脚本道)。独立自重启 subshell、绝不加 pids——订阅栈挂了自己拉起、不拖垮核心搜索；
 # 搜索挂了也不影响订阅栈。(inner `|| true`：在 set -e 下让崩溃后循环仍能重启，见 setetest 验证。)
@@ -228,14 +252,20 @@ fi
 # (品牌洗白 + 订阅URL/IP 脱敏)再进容器日志；③网关注入(access-proxy branding/bootstrap)随进程
 # 生效；④代号体系(Cumulus/Cirrus/Nebula/Stratus)不还原。下面把 ②③相关开关钉成 on 作保底。
 if [ "${MOUNT_SUBSTORE:-}" = "on" ] || [ "${MOUNT_SUBSTORE:-}" = "true" ] || [ "${MOUNT_SUBSTORE:-}" = "1" ] || [ "${MOUNT_SUBSTORE:-}" = "yes" ]; then
+  # 漏配诊断：cloudspace 子壳会继承全局 env，但读的是 SUPABASE_SERVICE_ROLE_KEY(非全局
+  # 邮箱那把 SUPABASE_SERVICE_KEY)。缺它则 supabase_backup_enabled() 四条件不满足、备份
+  # 静默 no-op、订阅数据不落盘。这里在启动前显式 warn，便于上线时立刻发现漏配(见顶部说明)。
+  if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+    echo "[fusionsearch] WARN: MOUNT_SUBSTORE=on 但 SUPABASE_SERVICE_ROLE_KEY 为空 —— cloudspace Supabase 备份不会启用(数据不落盘/不可恢复)。请在 Space 全局配 SUPABASE_BACKUP_ENABLED=true + SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY + SUPABASE_STORAGE_BUCKET(另 SUPABASE_STORAGE_OBJECT / SUPABASE_DAILY_BACKUP_PREFIX 做路径隔离)。"
+  fi
   (
     while :; do
-      echo "[fusionsearch] (cloudspace) starting subscription stack (gateway :${SUBSTORE_GATEWAY_PORT:-7861}, mount /cloud)"
+      echo "[fusionsearch] (cloudspace) starting subscription stack (gateway :${SUBSTORE_GATEWAY_PORT:-7861}, mount /cloudspace)"
       ( cd /opt/app \
         && env PORT="${SUBSTORE_GATEWAY_PORT:-7861}" \
                ACCESS_LOCK_PORT="${SUBSTORE_GATEWAY_PORT:-7861}" \
                CLOUDSPACE_UPSTREAM_PORT="${SUBSTORE_CORE_PORT:-3200}" \
-               CLOUDSPACE_MOUNT_PREFIX="${SUBSTORE_MOUNT_PREFIX:-/cloud}" \
+               CLOUDSPACE_MOUNT_PREFIX="${SUBSTORE_MOUNT_PREFIX:-/cloudspace}" \
                CLOUDSPACE_COVER_ENABLED="${SUBSTORE_COVER_ENABLED:-false}" \
                CLOUDSPACE_PRODUCT_NAME="${CLOUDSPACE_PRODUCT_NAME:-CloudSpace}" \
                SUB_STORE_X_POWERED_BY="${SUB_STORE_X_POWERED_BY:-CloudSpace}" \
