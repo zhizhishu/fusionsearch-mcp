@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { randomBytes, randomUUID } from 'crypto';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Readable } from 'node:stream';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -2108,6 +2109,26 @@ export function createApp(userConfig = {}) {
     );
   }
 
+  // Optional co-located CloudSpace subscription stack (Sub-Store) mount. When
+  // MOUNT_SUBSTORE is on, reverse-proxy /cloud/* to the CloudSpace access gateway on
+  // 127.0.0.1:SUBSTORE_GATEWAY_PORT. Unlike /email, the /cloud prefix is NOT stripped:
+  // the gateway runs with CLOUDSPACE_MOUNT_PREFIX=/cloud and rewrites the frontend
+  // asset/API/redirect/lock paths under /cloud itself. Mounted BEFORE express.json (the
+  // stack streams large request bodies + SSE and manages its own body parsing) and BEFORE
+  // siteGate (it has its own access lock). Default OFF — fusion still deploys unchanged.
+  if (['true', '1', 'yes', 'on'].includes(String(process.env.MOUNT_SUBSTORE ?? '').toLowerCase())) {
+    const cloudTarget = process.env.SUBSTORE_UPSTREAM ?? `http://127.0.0.1:${process.env.SUBSTORE_GATEWAY_PORT ?? '7861'}`;
+    app.use(
+      createProxyMiddleware({
+        pathFilter: (pathname) => pathname === '/cloud' || pathname.startsWith('/cloud/'),
+        target: cloudTarget,
+        changeOrigin: true,
+        ws: true
+        // No pathRewrite: forward the /cloud prefix intact (the gateway is mount-aware).
+      })
+    );
+  }
+
   app.use(express.json());
   app.use(
     cors({
@@ -2131,6 +2152,21 @@ export function createApp(userConfig = {}) {
     password: config.siteGatePassword ?? process.env.SITE_GATE_PASSWORD ?? '',
     secret: config.sessionSecret || process.env.SESSION_SECRET || ''
   });
+  // ---- claw 海洋入口: 根 / 出三入口导航页(仅当 public/entry/ 存在时挂; fusion 独立部署无此目录、自动跳过) ----
+  // 只对浏览器 GET(text/html)出入口页; 其余(带 token / API / 非 html)照常落到 siteGate。
+  const __entryDir = path.resolve(__dirname, '../public/entry');
+  if (fs.existsSync(path.join(__entryDir, 'login.html'))) {
+    app.use('/entry', express.static(__entryDir));
+    app.get('/', (req, res, next) => {
+      const accept = String(req.headers.accept || '');
+      if (req.method === 'GET' && accept.includes('text/html')) {
+        res.set('Cache-Control', 'no-store').type('html').sendFile(path.join(__entryDir, 'login.html'));
+        return;
+      }
+      next();
+    });
+  }
+
   app.use(siteGate.middleware);
   app.use('/gate', express.static(siteGate.gateDir));
   app.post('/api/gate/login', asyncHandler(async (req, res) => {

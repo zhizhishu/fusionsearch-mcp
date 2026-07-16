@@ -149,17 +149,20 @@ if [ -n "${PERPLEXITY_TOKEN_CONFIG:-}" ]; then
   PPLX_TOKEN_POOL_OUT=/app/services/perplexity/token_pool_config.json \
     /opt/pplx-venv/bin/python /app/services/perplexity/inject_heartbeat.py \
     || printf '%s' "$PERPLEXITY_TOKEN_CONFIG" > /app/services/perplexity/token_pool_config.json
-  # 热更内部 admin token(node 的 sync-token 端点热更 Python 池要用同值;node/python 同为子进程共享此 env)
-  export PPLX_ADMIN_TOKEN="${PPLX_ADMIN_TOKEN:-fs-pplx-hotreload-2026}"
+  # 热更内部 admin token(node 的 sync-token 端点热更 Python 池要用同值;node/python 同为子进程共享此 env)。
+  # 没配就每次启动随机生成(node/python 继承同一 export 值、互认)，不再把固定口令写进公开库。
+  _pplx_rand() { head -c 18 /dev/urandom 2>/dev/null | base64 2>/dev/null | tr -dc 'A-Za-z0-9' | cut -c1-24; }
+  export PPLX_ADMIN_TOKEN="${PPLX_ADMIN_TOKEN:-pplx-adm-$(_pplx_rand)}"
+  export PERPLEXITY_MCP_TOKEN="${PERPLEXITY_MCP_TOKEN:-pplx-key-$(_pplx_rand)}"
   export PERPLEXITY_API_URL="${PERPLEXITY_API_URL:-http://127.0.0.1:8001/v1}"
-  export PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY:-${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}}"
+  export PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY:-$PERPLEXITY_MCP_TOKEN}"
   # perplexity 是**可选**第6源：独立自重启 subshell、**绝不加入 pids 监控**——它挂了自己拉起、
   # 更不会触发核心容器 shutdown(不拖垮其它五源)。输出直接进 stdout，便于在 HF 日志里诊断。
   (
     while :; do
       echo "[fusionsearch] (perplexity) starting perplexity.server on :8001"
       ( cd /app/services/perplexity \
-        && MCP_TOKEN="${PERPLEXITY_MCP_TOKEN:-sk-fusion-pplx}" \
+        && MCP_TOKEN="$PERPLEXITY_MCP_TOKEN" \
            SOCKS_PROXY="${PERPLEXITY_SOCKS_PROXY:-${SOCKS_PROXY:-}}" \
            /opt/pplx-venv/bin/python -m perplexity.server --host 127.0.0.1 --port 8001 ) 2>&1
       echo "[fusionsearch] (perplexity) exited status=$?; restart in 20s (不影响核心五源)"
@@ -205,6 +208,49 @@ if [ "${MOUNT_MAIL:-}" = "on" ] || [ "${MOUNT_MAIL:-}" = "true" ] || [ "${MOUNT_
   echo "[fusionsearch] clawemail(邮箱) 自重启后台已拉起(独立于搜索，挂了不拖垮)"
 else
   echo "[fusionsearch] MOUNT_MAIL 未开，跳过 clawemail 邮箱服务(fusion 独立模式)"
+fi
+
+# ---- CloudSpace 订阅栈(可选，MOUNT_SUBSTORE=on 时启用) ----
+# 合并部署时与 fusion 同容器：cloudspace 自带网关(access-proxy)监听内部 :7861，由 fusion
+# node(app.js)反代 /cloud/* 过来(保留 /cloud 前缀，网关按 CLOUDSPACE_MOUNT_PREFIX=/cloud 感知,
+# 自行把前端 API/重定向/锁屏路径挂到 /cloud 下)。直接调用 cloudspace 自己的 supervisor
+# (/opt/app/start.sh)，让它管好自己那套进程(网关 + Cumulus 底核 + Cirrus 内核/http-meta +
+# Stratus 脚本道)。独立自重启 subshell、绝不加 pids——订阅栈挂了自己拉起、不拖垮核心搜索；
+# 搜索挂了也不影响订阅栈。(inner `|| true`：在 set -e 下让崩溃后循环仍能重启，见 setetest 验证。)
+#
+# 端口隔离(全部避开 claw 已占的 3000/3100/8080/8000/8001)：
+#   PORT/ACCESS_LOCK_PORT=7861(网关对内) · CLOUDSPACE_UPSTREAM_PORT=3200(core) ·
+#   Cirrus/http-meta 9876 · Stratus 9100/9101(均 cloudspace 默认，claw 空闲)。
+# ⚠ 必须显式覆盖 PORT——否则 cloudspace start.sh 会继承 claw 的 PORT(对外口)导致撞口。
+#
+# 品牌隐藏 4 层全程保住：①构建期洗白已烘进镜像；②运行期日志过滤——cloudspace start.sh 顶部
+# 会自动用 FIFO 把本 subshell 及其所有子引擎的 stdout/stderr 接进 cloudspace-log-filter.js
+# (品牌洗白 + 订阅URL/IP 脱敏)再进容器日志；③网关注入(access-proxy branding/bootstrap)随进程
+# 生效；④代号体系(Cumulus/Cirrus/Nebula/Stratus)不还原。下面把 ②③相关开关钉成 on 作保底。
+if [ "${MOUNT_SUBSTORE:-}" = "on" ] || [ "${MOUNT_SUBSTORE:-}" = "true" ] || [ "${MOUNT_SUBSTORE:-}" = "1" ] || [ "${MOUNT_SUBSTORE:-}" = "yes" ]; then
+  (
+    while :; do
+      echo "[fusionsearch] (cloudspace) starting subscription stack (gateway :${SUBSTORE_GATEWAY_PORT:-7861}, mount /cloud)"
+      ( cd /opt/app \
+        && env PORT="${SUBSTORE_GATEWAY_PORT:-7861}" \
+               ACCESS_LOCK_PORT="${SUBSTORE_GATEWAY_PORT:-7861}" \
+               CLOUDSPACE_UPSTREAM_PORT="${SUBSTORE_CORE_PORT:-3200}" \
+               CLOUDSPACE_MOUNT_PREFIX="${SUBSTORE_MOUNT_PREFIX:-/cloud}" \
+               CLOUDSPACE_COVER_ENABLED="${SUBSTORE_COVER_ENABLED:-false}" \
+               CLOUDSPACE_PRODUCT_NAME="${CLOUDSPACE_PRODUCT_NAME:-CloudSpace}" \
+               SUB_STORE_X_POWERED_BY="${SUB_STORE_X_POWERED_BY:-CloudSpace}" \
+               CLOUDSPACE_LOG_FILTER_ENABLED="${CLOUDSPACE_LOG_FILTER_ENABLED:-true}" \
+               CLOUDSPACE_LOG_FILTER_BRAND="${CLOUDSPACE_LOG_FILTER_BRAND:-true}" \
+               CLOUDSPACE_LOG_FILTER_REDACT="${CLOUDSPACE_LOG_FILTER_REDACT:-true}" \
+               CLOUDSPACE_LOG_FILTER_SCRUB_CLIENTS="${CLOUDSPACE_LOG_FILTER_SCRUB_CLIENTS:-true}" \
+               sh /opt/app/start.sh ) 2>&1 || true
+      echo "[fusionsearch] (cloudspace) exited; restart in 15s (不影响搜索/邮箱)"
+      sleep 15
+    done
+  ) &
+  echo "[fusionsearch] cloudspace(订阅栈) 自重启后台已拉起(独立于搜索/邮箱，挂了不拖垮)"
+else
+  echo "[fusionsearch] MOUNT_SUBSTORE 未开，跳过 cloudspace 订阅栈(fusion 独立模式)"
 fi
 
 # fusion 主进程：Supabase 用自己的 key(fusionsearch_backup)。合并部署时 Space 全局
