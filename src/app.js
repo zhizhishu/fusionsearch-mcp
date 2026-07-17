@@ -1993,18 +1993,24 @@ export function createApp(userConfig = {}) {
 
   // Auto-probe all sources every 30 minutes so the history ring fills without manual intervention.
   // force:true bypasses the 10-min manual cooldown; unref so the timer does not block process exit.
-  const _autoProbeTimer = setInterval(() => {
-    runMonitoringProbe({ config, monitor: monitoring, force: true })
-      .then(() => {
-        if (supabaseEnabled()) {
-          backupMonitorHistory(monitoring.exportHistory()).catch((err) =>
-            logEvent('warn', 'supabase', 'Monitor history backup failed', { error: String(err?.message || err) })
-          );
-        }
-      })
-      .catch((err) => logEvent('warn', 'monitoring', 'Scheduled auto-probe failed', { error: String(err?.message || err) }));
-  }, 30 * 60 * 1000);
-  _autoProbeTimer.unref?.();
+  // Gated by FUSIONSEARCH_AUTO_PROBE_ENABLED (default on): set to 'false' to disable the periodic
+  // outbound probing — reduces machine-room outbound traffic that can look scanner-like / trip HF flags.
+  const _autoProbeEnabled = String(process.env.FUSIONSEARCH_AUTO_PROBE_ENABLED ?? '').toLowerCase() !== 'false';
+  const _autoProbeTimer = _autoProbeEnabled
+    ? setInterval(() => {
+        runMonitoringProbe({ config, monitor: monitoring, force: true })
+          .then(() => {
+            if (supabaseEnabled()) {
+              backupMonitorHistory(monitoring.exportHistory()).catch((err) =>
+                logEvent('warn', 'supabase', 'Monitor history backup failed', { error: String(err?.message || err) })
+              );
+            }
+          })
+          .catch((err) => logEvent('warn', 'monitoring', 'Scheduled auto-probe failed', { error: String(err?.message || err) }));
+      }, 30 * 60 * 1000)
+    : null;
+  _autoProbeTimer?.unref?.();
+  if (!_autoProbeEnabled) logEvent('info', 'monitoring', 'Auto-probe disabled via FUSIONSEARCH_AUTO_PROBE_ENABLED=false');
 
   const publicConfig = () => ({
     serverName: config.serverName,

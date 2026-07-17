@@ -326,25 +326,14 @@ async function probeTavily(config, monitor) {
     monitor.record('tavily', { status: 'paused', message: 'Tavily 未启用或未配置 Key/Token', source: 'probe' });
     return;
   }
-  // 真测：发起一次轻量 Tavily 搜索(额度充足,主动探针直接打真实请求)。
-  const startedAt = Date.now();
-  try {
-    const result = await executeTavilySearchOnly({ config, query: 'health check', maxResults: 1 });
-    const n = Array.isArray(result?.results) ? result.results.length : 0;
-    monitor.record('tavily', {
-      ok: true,
-      message: `Tavily 搜索探针通过，返回 ${n} 条`,
-      responseTimeMs: Date.now() - startedAt,
-      source: 'probe'
-    });
-  } catch (error) {
-    monitor.record('tavily', {
-      ok: false,
-      message: error instanceof Error ? error.message : String(error),
-      responseTimeMs: Date.now() - startedAt,
-      source: 'probe'
-    });
-  }
+  // 只查配置：不发真实 Tavily 请求。周期性/主动探针对外真呼会让机房 IP 看起来像扫描器、
+  // 是 HF flag 的诱因之一；真实可用性由实际搜索流量体现，探针只确认已启用且凭据齐。
+  monitor.record('tavily', {
+    ok: true,
+    message: 'Tavily 已启用且凭据已配置（配置探针，未发起真实请求）',
+    responseTimeMs: 0,
+    source: 'probe'
+  });
 }
 
 async function probeFirecrawl(config, monitor) {
@@ -353,25 +342,14 @@ async function probeFirecrawl(config, monitor) {
     monitor.record('firecrawl', { status: 'paused', message: '未配置 Firecrawl Key', source: 'probe' });
     return;
   }
-  // 真测：发起一次 Firecrawl 抓取(额度充足,主动探针直接打真实请求)。
-  const startedAt = Date.now();
-  try {
-    const result = await executeFirecrawlFetch({ config, url: 'https://example.com', timeoutMs: 15_000 });
-    const len = result?.content?.length ?? 0;
-    monitor.record('firecrawl', {
-      ok: true,
-      message: `Firecrawl 抓取探针通过，正文 ${len} 字`,
-      responseTimeMs: Date.now() - startedAt,
-      source: 'probe'
-    });
-  } catch (error) {
-    monitor.record('firecrawl', {
-      ok: false,
-      message: error instanceof Error ? error.message : String(error),
-      responseTimeMs: Date.now() - startedAt,
-      source: 'probe'
-    });
-  }
+  // 只查配置：不真抓 example.com。周期性对外真呼是机房 IP 被判扫描器 / 触发 HF flag 的诱因之一；
+  // 有 Key 即视为就绪，真实可用性由实际抓取流量体现。
+  monitor.record('firecrawl', {
+    ok: true,
+    message: 'Firecrawl Key 已配置（配置探针，未发起真实抓取）',
+    responseTimeMs: 0,
+    source: 'probe'
+  });
 }
 
 async function probePerplexity(config, monitor) {
