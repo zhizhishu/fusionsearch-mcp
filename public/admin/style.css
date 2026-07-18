@@ -718,6 +718,118 @@ input:focus, select:focus, textarea:focus {
 
 .model-card.active small { color: var(--primary); font-weight: 700; }
 
+/* Grok 降级链（有序、可查看/编辑使用顺序） */
+.grok-chain {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chain-empty {
+  padding: 12px 14px;
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--control-radius);
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.chain-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--control-radius);
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+}
+
+.chain-item[data-idx="0"] {
+  border-color: var(--primary);
+  background: var(--accent-tint);
+}
+
+.chain-rank {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--primary);
+  font: 700 12px/1 var(--font-mono);
+}
+
+.chain-item[data-idx="0"] .chain-rank {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.chain-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: color-mix(in oklch, var(--foreground) 92%, black);
+  font: 12px/1.4 var(--font-mono);
+}
+
+.chain-tag {
+  flex: none;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.chain-item[data-idx="0"] .chain-tag { color: var(--primary); font-weight: 700; }
+
+.chain-ops {
+  flex: none;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.chain-op {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  background: var(--surface-sunken);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.chain-op:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.chain-op:disabled { opacity: .35; cursor: default; }
+.chain-op-remove:hover:not(:disabled) { border-color: #e5484d; color: #e5484d; }
+
+.model-picker-subhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+.model-picker-subhead span {
+  font-size: 12px;
+  font-weight: 660;
+  color: color-mix(in oklch, var(--foreground) 84%, black);
+}
+.model-picker-subhead small { color: var(--muted-foreground); font-size: 11px; }
+
 /* ——————————————————————————————————————————————
    HF Secrets / Key 状态
    —————————————————————————————————————————————— */

@@ -58,6 +58,7 @@ const fields = {
   grokModel: $('#grokModel'),
   grokModelList: $('#grokModelList'),
   grokModelHint: $('#grokModelHint'),
+  grokChainList: $('#grokChainList'),
   syncGrokHfSecrets: $('#syncGrokHfSecrets'),
   grokHfToken: $('#grokHfToken'),
   grokSystemPrompt: $('#grokSystemPrompt'),
@@ -179,39 +180,102 @@ function normalizeModelList(models = []) {
   ));
 }
 
+// GROK_MODEL = 逗号分隔的降级链：第 1 个是主模型，其余按序 fallback。
+// executeGrokWebSearch 按此顺序试第一个成功的，主模型挂/超时自动降级下一个。
+function getGrokChain() {
+  return String(fields.grokModel?.value || '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter(Boolean);
+}
+
 function getCurrentGrokModel() {
-  return fields.grokModel?.value.trim() || 'grok-4.20-beta';
+  return getGrokChain()[0] || 'grok-4.20-beta';
+}
+
+function setGrokChain(chain, { source = '', touch = true } = {}) {
+  const normalized = normalizeModelList(chain);
+  if (fields.grokModel) fields.grokModel.value = normalized.join(',');
+  renderGrokModels(grokModelOptions, { source });
+  if (touch && fields.saveHint) fields.saveHint.textContent = '模型顺序已更新，保存后生效';
+}
+
+function renderGrokChain(chain = getGrokChain()) {
+  if (!fields.grokChainList) return;
+  if (!chain.length) {
+    fields.grokChainList.innerHTML =
+      '<li class="chain-empty">降级链为空 —— 读取或点选下方可用模型加入。</li>';
+    return;
+  }
+  fields.grokChainList.innerHTML = chain
+    .map((model, i) => `
+      <li class="chain-item" data-idx="${i}">
+        <span class="chain-rank">${i + 1}</span>
+        <span class="chain-name">${escapeHtml(model)}</span>
+        <span class="chain-tag">${i === 0 ? '主模型' : '降级 ' + i}</span>
+        <span class="chain-ops">
+          <button type="button" class="chain-op" data-op="up" ${i === 0 ? 'disabled' : ''} title="上移" aria-label="上移 ${escapeHtml(model)}">&#8593;</button>
+          <button type="button" class="chain-op" data-op="down" ${i === chain.length - 1 ? 'disabled' : ''} title="下移" aria-label="下移 ${escapeHtml(model)}">&#8595;</button>
+          <button type="button" class="chain-op chain-op-remove" data-op="remove" title="移除" aria-label="移除 ${escapeHtml(model)}">&times;</button>
+        </span>
+      </li>
+    `)
+    .join('');
+}
+
+function grokChainOp(idx, op) {
+  const chain = getGrokChain();
+  if (idx < 0 || idx >= chain.length) return;
+  if (op === 'remove') {
+    chain.splice(idx, 1);
+  } else if (op === 'up' && idx > 0) {
+    [chain[idx - 1], chain[idx]] = [chain[idx], chain[idx - 1]];
+  } else if (op === 'down' && idx < chain.length - 1) {
+    [chain[idx + 1], chain[idx]] = [chain[idx], chain[idx + 1]];
+  } else {
+    return;
+  }
+  setGrokChain(chain, { source: '手动排序' });
+}
+
+function toggleGrokModel(model) {
+  if (!model) return;
+  const chain = getGrokChain();
+  const at = chain.indexOf(model);
+  if (at >= 0) chain.splice(at, 1);
+  else chain.push(model);
+  setGrokChain(chain, { source: at >= 0 ? '移出链' : '加入链' });
 }
 
 function renderGrokModels(models = grokModelOptions, { source = '' } = {}) {
   if (!fields.grokModelList) return;
-  const currentModel = getCurrentGrokModel();
-  const normalized = normalizeModelList([currentModel, ...models]);
+  const chain = getGrokChain();
+  const normalized = normalizeModelList([...chain, ...models]);
   grokModelOptions = normalized;
 
   fields.grokModelList.innerHTML = normalized
     .map((model) => {
-      const active = model === currentModel;
+      const rank = chain.indexOf(model);
+      const inChain = rank >= 0;
+      const tag = !inChain
+        ? '点击加入降级链'
+        : rank === 0
+          ? '主模型 · 点击移出'
+          : `降级 ${rank} · 点击移出`;
       return `
-        <button class="model-card ${active ? 'active' : ''}" type="button" data-model-id="${escapeHtml(model)}" aria-pressed="${String(active)}">
+        <button class="model-card ${inChain ? 'active' : ''}" type="button" data-model-id="${escapeHtml(model)}" aria-pressed="${String(inChain)}">
           <strong>${escapeHtml(model)}</strong>
-          <small>${active ? '当前默认' : '点击选择'}</small>
+          <small>${tag}</small>
         </button>
       `;
     })
     .join('');
 
   if (fields.grokModelHint) {
-    const countText = normalized.length > 1 ? `${normalized.length} 个模型可选` : '当前模型可编辑';
+    const countText = `降级链 ${chain.length} 个 · 可选 ${normalized.length} 个`;
     fields.grokModelHint.textContent = source ? `${source} · ${countText}` : countText;
   }
-}
-
-function selectGrokModel(model) {
-  if (!model || !fields.grokModel) return;
-  fields.grokModel.value = model;
-  renderGrokModels(grokModelOptions, { source: '已选择' });
-  fields.saveHint.textContent = '模型已选择，保存后生效';
+  renderGrokChain(chain);
 }
 
 let revealedValuesCache = null;
@@ -557,7 +621,7 @@ async function loadConfig() {
   }
   fields.grokApiUrl.value = config.fusion?.grokApiUrl || '';
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
-  renderGrokModels([fields.grokModel.value], { source: '当前配置' });
+  renderGrokModels([], { source: '当前配置' });
   fields.grokSystemPrompt.value = config.fusion?.grokSystemPrompt || defaultGrokSystemPrompt;
   fields.tavilyEnabled.checked = config.fusion?.tavilyEnabled !== false;
   setTavilyProvider(config.fusion?.tavilyProvider || 'rest');
@@ -1106,7 +1170,15 @@ fields.grokModel?.addEventListener('input', () => {
 fields.grokModelList?.addEventListener('click', (event) => {
   const card = event.target.closest('.model-card[data-model-id]');
   if (!card) return;
-  selectGrokModel(card.dataset.modelId);
+  toggleGrokModel(card.dataset.modelId);
+});
+
+fields.grokChainList?.addEventListener('click', (event) => {
+  const op = event.target.closest('.chain-op[data-op]');
+  if (!op) return;
+  const item = op.closest('.chain-item[data-idx]');
+  if (!item) return;
+  grokChainOp(Number(item.dataset.idx), op.dataset.op);
 });
 
 fields.tavilyProviderChoices.forEach((choice) => {

@@ -242,19 +242,26 @@
               </label>
               <p class="inline-hint">🔑 Grok API Key 到「密钥中心」统一查看 / 修改。</p>
               <label class="field">
-                <span>默认模型</span>
-                <input id="grokModel" type="text" autocomplete="off" />
-                <small>可手填模型 ID，也可以读取模型列表后点选。</small>
+                <span>模型顺序（逗号分隔）</span>
+                <input id="grokModel" type="text" autocomplete="off" spellcheck="false" placeholder="grok-4.5,grok-4.3-fast" />
+                <small>逗号分隔＝优先→降级；主模型失败自动降级下一个。也可在下方点选 / 调整顺序。</small>
               </label>
-              <div class="model-picker span-2" aria-label="Grok 模型选择">
+              <div class="model-picker span-2" aria-label="Grok 模型降级链">
                 <div class="model-picker-head">
-                  <span>模型选择</span>
-                  <small id="grokModelHint">读取模型后，通过边框卡片选择当前默认模型。</small>
+                  <span>降级链 · 使用顺序</span>
+                  <small id="grokModelHint">从上到下按序尝试，主模型失败自动降级到下一个。</small>
+                </div>
+                <ol class="grok-chain" id="grokChainList">
+                  <li class="chain-empty">降级链为空 —— 读取或点选下方可用模型加入。</li>
+                </ol>
+                <div class="model-picker-subhead">
+                  <span>可用模型</span>
+                  <small>点击卡片加入 / 移出降级链</small>
                 </div>
                 <div class="model-card-grid" id="grokModelList">
-                  <button class="model-card active" type="button" data-model-id="grok-4.20-beta">
-                    <strong>grok-4.20-beta</strong>
-                    <small>当前默认</small>
+                  <button class="model-card" type="button" data-model-id="grok-4.5">
+                    <strong>grok-4.5</strong>
+                    <small>点击加入降级链</small>
                   </button>
                 </div>
               </div>
