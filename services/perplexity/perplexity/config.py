@@ -131,6 +131,8 @@ def build_exit_pool(base: Optional[str] = None, size: Optional[int] = None) -> l
         return [base]
     # 必须是 resin 账号形态 <platform>.<account>:<token>@<host>:<port>（靠 @ 分隔 auth/host 识别）；
     # 纯 host:port 代理无 @ → 不匹配 → 回退单条不轮换。
+    # ⚠️ 本池化仅为 resin 出口轮换设计：带点用户名的普通代理(如 socks5://john.doe:pw@host)会被误当
+    #    platform.account 轮换——非 resin 代理别设 PERPLEXITY_EXIT_POOL_SIZE>1。
     m = re.match(r"^(socks5h?://)([^.:/@]+)\.([^:@]+):([^@]+@.+)$", base)
     if not m:
         return [base]
