@@ -7,6 +7,7 @@ Modify these values to customize behavior without changing core code.
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -96,6 +97,46 @@ def _read_int_env(name: str, default: int, min_value: int = MIN_TIMEOUT_SECONDS)
 DEFAULT_SEARCH_TIMEOUT: int = 300
 DEFAULT_DEEP_RESEARCH_TIMEOUT: int = 900
 DEFAULT_FILE_UPLOAD_TIMEOUT: int = 180
+
+
+# ── perplexity resin 出口池（内置 on-failure 换出口，治单出口飘）───────────────
+# resin 按 socks5 URL 里的 <账号> 分配出口 IP（同账号粘 168h）。把 SOCKS_PROXY 当模板，
+# 只替换账号段生成 <prefix>1..<prefix>N，查询失败就换下一个出口重试（见 Client.search_resilient）。
+# POOL_SIZE<=1（默认）= 关闭轮换、行为与旧版完全一致；设 >1 才启用。
+PERPLEXITY_EXIT_POOL_SIZE: int = _read_int_env("PERPLEXITY_EXIT_POOL_SIZE", 1, min_value=1)
+PERPLEXITY_EXIT_MAX_RETRY: int = _read_int_env("PERPLEXITY_EXIT_MAX_RETRY", 3, min_value=1)
+# 单次尝试超时(秒)：故意小，坏出口快弃、好出口够答；多次重试仍卡在调用方总预算内。
+PERPLEXITY_EXIT_ATTEMPT_TIMEOUT: int = _read_int_env(
+    "PERPLEXITY_EXIT_ATTEMPT_TIMEOUT", 25, min_value=MIN_TIMEOUT_SECONDS
+)
+PERPLEXITY_EXIT_ACCOUNT_PREFIX: str = os.getenv("PERPLEXITY_EXIT_ACCOUNT_PREFIX", "pplx")
+
+
+def build_exit_pool(base: Optional[str] = None, size: Optional[int] = None) -> list:
+    """从 SOCKS_PROXY 模板生成出口池：仅替换 `<platform>.<account>` 的账号段为 `<prefix>1..N`。
+
+    base 形如 `socks5://HighPurity.pplxq:TOKEN@host:port`。
+    - 无 base → []（直连，不轮换）
+    - size<=1 或结构不认(无 platform.account) → [base]（单出口，不轮换）
+    - 否则 → N 条不同账号(=resin 换出口)的 socks5 URL
+    """
+    if base is None:
+        base = SOCKS_PROXY or ""
+    if base and "#" in base:
+        base = base.split("#")[0]
+    n = size if size is not None else PERPLEXITY_EXIT_POOL_SIZE
+    if not base:
+        return []
+    if n <= 1:
+        return [base]
+    # 必须是 resin 账号形态 <platform>.<account>:<token>@<host>:<port>（靠 @ 分隔 auth/host 识别）；
+    # 纯 host:port 代理无 @ → 不匹配 → 回退单条不轮换。
+    m = re.match(r"^(socks5h?://)([^.:/@]+)\.([^:@]+):([^@]+@.+)$", base)
+    if not m:
+        return [base]
+    scheme, platform, _account, rest = m.group(1), m.group(2), m.group(3), m.group(4)
+    prefix = PERPLEXITY_EXIT_ACCOUNT_PREFIX
+    return [f"{scheme}{platform}.{prefix}{i}:{rest}" for i in range(1, n + 1)]
 
 # 环境变量覆盖（用于不依赖 ClientPool 的 fallback 路径，如匿名 Client）
 SEARCH_TIMEOUT: int = _read_int_env("PPLX_SEARCH_TIMEOUT", DEFAULT_SEARCH_TIMEOUT)

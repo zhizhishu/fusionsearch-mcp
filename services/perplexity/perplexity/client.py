@@ -38,6 +38,9 @@ from .config import (
     ENDPOINT_UPLOAD_URL,
     FILE_UPLOAD_TIMEOUT,
     SOCKS_PROXY,
+    PERPLEXITY_EXIT_MAX_RETRY,
+    PERPLEXITY_EXIT_ATTEMPT_TIMEOUT,
+    build_exit_pool,
     get_search_timeout,
 )
 from .emailnator import Emailnator
@@ -51,28 +54,24 @@ class Client:
     """
 
     def __init__(self, cookies={}):
-        # Build proxy configuration from SOCKS_PROXY env var
+        # Store original cookies for export / session rebuild on exit rotation
+        self._cookies = cookies.copy() if cookies else {}
+
+        # resin 出口池：以 SOCKS_PROXY 为模板生成 <prefix>1..N（POOL_SIZE<=1 → 单条，不轮换）。
         # Format: socks5://[user[:pass]@]host[:port][#remark]
-        proxy_url = None
-        if SOCKS_PROXY:
-            # Remove the remark part (after #) if present
-            proxy_url = SOCKS_PROXY.split("#")[0] if "#" in SOCKS_PROXY else SOCKS_PROXY
+        self._exit_pool = build_exit_pool()
+        self._exit_idx = 0
+        proxy_url = self._exit_pool[self._exit_idx] if self._exit_pool else None
+        if proxy_url:
             logger.debug(
-                "Client proxy configured: %s", proxy_url.split("@")[-1]
+                "Client proxy configured: %s (exit-pool=%d)",
+                proxy_url.split("@")[-1], len(self._exit_pool),
             )
         else:
             logger.debug("Client proxy not configured, using direct connection")
 
-        # Store original cookies for export
-        self._cookies = cookies.copy() if cookies else {}
-
         # Initialize an HTTP session with default headers and optional cookies
-        self.session = requests.Session(
-            headers=DEFAULT_HEADERS.copy(),
-            cookies=cookies,
-            impersonate="chrome",
-            proxy=proxy_url,
-        )
+        self.session = self._build_session(proxy_url)
         logger.debug(
             "Client session initialized (impersonate=chrome, proxy=%s)",
             "enabled" if proxy_url else "disabled",
@@ -94,6 +93,87 @@ class Client:
         # Initialize session by making a GET request
         logger.debug("Client initializing auth session via %s", ENDPOINT_AUTH_SESSION)
         self.session.get(ENDPOINT_AUTH_SESSION, timeout=30)
+
+    def _build_session(self, proxy_url):
+        """Create a fresh curl_cffi session (same cookies + chrome impersonation) on the given proxy."""
+        return requests.Session(
+            headers=DEFAULT_HEADERS.copy(),
+            cookies=self._cookies,
+            impersonate="chrome",
+            proxy=proxy_url,
+        )
+
+    def _rotate_exit(self) -> bool:
+        """Switch to the next resin exit in the pool (rebuild session + warm CF on new IP).
+
+        Returns False when there is nothing to rotate (pool size <= 1).
+        """
+        if len(self._exit_pool) <= 1:
+            return False
+        self._exit_idx = (self._exit_idx + 1) % len(self._exit_pool)
+        self.session = self._build_session(self._exit_pool[self._exit_idx])
+        # 新出口=新 IP，旧 cf_clearance 失效；暖一次 auth session 让 CF 重新放行（best-effort）。
+        try:
+            self.session.get(ENDPOINT_AUTH_SESSION, timeout=15)
+        except Exception:
+            pass
+        return True
+
+    def search_resilient(self, query, mode="auto", model=None, sources=["web"],
+                         files={}, stream=False, language="en-US", follow_up=None,
+                         incognito=False, timeout=None, file_upload_timeout=None):
+        """search() 的出口自愈包装：某个 resin 出口查询失败/超时就换下一个重试（最多 MAX_RETRY 次）。
+
+        - 出口池<=1 或 stream（生成器不便重试）→ 直接单发 search()，行为与旧版一致。
+        - 每次尝试用较小超时（ATTEMPT_TIMEOUT），坏出口快弃、好出口够答；命中即粘住当前出口。
+        - 判据对齐 run_query：search() 不抛且返回非空=成功；抛异常/空返回=换出口再试。
+        - AssertionError（输入/额度类）不换出口、直接抛。全试完仍败 → 抛最后错误（交池级处理/降级）。
+        """
+        pool_n = len(self._exit_pool)
+        if pool_n <= 1 or stream:
+            return self.search(
+                query, mode=mode, model=model, sources=sources, files=files,
+                stream=stream, language=language, follow_up=follow_up,
+                incognito=incognito, timeout=timeout, file_upload_timeout=file_upload_timeout,
+            )
+
+        attempts = min(PERPLEXITY_EXIT_MAX_RETRY, pool_n)
+        budget = timeout if (timeout and timeout > 0) else get_search_timeout(mode)
+        # deep research 天生慢，不套小超时；其余按 ATTEMPT_TIMEOUT 卡短以便快速换出口。
+        per_attempt = budget if mode == "deep research" else min(budget, PERPLEXITY_EXIT_ATTEMPT_TIMEOUT)
+
+        last_err = None
+        for i in range(attempts):
+            try:
+                res = self.search(
+                    query, mode=mode, model=model, sources=sources, files=files,
+                    stream=False, language=language, follow_up=follow_up,
+                    incognito=incognito, timeout=per_attempt,
+                    file_upload_timeout=file_upload_timeout,
+                )
+                if res:
+                    if i > 0:
+                        logger.info(
+                            "perplexity: exit-pool 第 %d 次重试命中 (exit idx=%d/%d)",
+                            i, self._exit_idx, pool_n,
+                        )
+                    return res  # 好出口 → 粘住(下次仍从此出口起)
+                last_err = "empty response"
+            except AssertionError:
+                raise
+            except Exception as exc:
+                last_err = exc
+            if i < attempts - 1:
+                if not self._rotate_exit():
+                    break
+                logger.warning(
+                    "perplexity: 换出口 -> idx=%d/%d 重试 (因: %s)",
+                    self._exit_idx, pool_n, str(last_err)[:120],
+                )
+
+        if isinstance(last_err, Exception):
+            raise last_err
+        raise RuntimeError(f"perplexity exit-pool {attempts} 次尝试均失败: {last_err}")
 
     @property
     def cookies(self) -> dict:

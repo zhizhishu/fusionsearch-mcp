@@ -247,7 +247,7 @@ def run_query(
 
             logger.debug(f"[{client_id}] Executing search: mode={mode}, model={model}")
 
-            response = client.search(
+            response = client.search_resilient(
                 clean_query,
                 mode=mode,
                 model=model,
@@ -316,7 +316,7 @@ def run_query(
 
             logger.debug(f"[{best_client_id}] Executing fallback search: mode=auto, model=None")
 
-            response = best_client.search(
+            response = best_client.search_resilient(
                 clean_query,
                 mode="auto",
                 model=None,
@@ -352,7 +352,7 @@ def run_query(
             logger.info("All clients exhausted, attempting anonymous auto mode fallback...")
 
             anonymous_client = Client({})
-            response = anonymous_client.search(
+            response = anonymous_client.search_resilient(
                 clean_query,
                 mode="auto",
                 model=None,
