@@ -43,6 +43,7 @@ from .config import (
     MIN_TIMEOUT_SECONDS,
     PERPLEXITY_EXIT_MAX_RETRY,
     PERPLEXITY_EXIT_ATTEMPT_TIMEOUT,
+    PERPLEXITY_EXIT_TOTAL_BUDGET,
     build_exit_pool,
     get_search_timeout,
 )
@@ -63,7 +64,8 @@ class Client:
         # resin 出口池：以 SOCKS_PROXY 为模板生成 <prefix>1..N（POOL_SIZE<=1 → 单条，不轮换）。
         # Format: socks5://[user[:pass]@]host[:port][#remark]
         self._exit_pool = build_exit_pool()
-        self._exit_idx = 0
+        self._exit_idx = 0        # 当前(粘性)出口下标；A方案跨请求持久，命中粘住/失败挪一格
+        self._session_idx = 0     # self.session 当前是为哪个出口建的(惰性同步用，见 _ensure_session)
         # 串行化本 Client 的出口池查询：Client 被 ClientPool 跨线程共享(asyncio.to_thread)，
         # search_resilient 会在请求中途换 self.session/_exit_idx，无锁会被并发请求踩。
         # 单登录账号本也不该并发打(rate/风控)，串行既修 bug 又更对。
@@ -110,37 +112,40 @@ class Client:
             proxy=proxy_url,
         )
 
-    def _rotate_exit(self) -> bool:
-        """Switch to the next resin exit in the pool (rebuild session + warm CF on new IP).
+    def _ensure_session(self) -> None:
+        """惰性把 self.session 同步到当前 self._exit_idx。
 
-        Returns False when there is nothing to rotate (pool size <= 1).
+        A方案跨请求粘性游走：失败时只挪 self._exit_idx(便宜)，session 不立刻重建；
+        下次真要用这个出口时(本请求下一发 or 下一个请求首发)才在这里重建+暖场。
+        好处：命中的出口 session 一直复用(粘住)；失败挪格不产生"末尾白暖场"浪费。
         """
-        if len(self._exit_pool) <= 1:
-            return False
-        self._exit_idx = (self._exit_idx + 1) % len(self._exit_pool)
+        if self._session_idx == self._exit_idx and self.session is not None:
+            return
         self.session = self._build_session(self._exit_pool[self._exit_idx])
-        # 新出口=新 IP，旧 cf_clearance 失效；暖一次 auth session 让 CF 重新放行（best-effort）。
-        # 超时收窄到 10s：暖场也算进 search_resilient 的 deadline 预算，别让它把总时长撑爆。
+        self._session_idx = self._exit_idx
+        # 新出口=新 IP，旧 cf_clearance 失效；暖一次 auth session 让 CF 重新放行（best-effort，算进 deadline）。
         try:
             self.session.get(ENDPOINT_AUTH_SESSION, timeout=10)
         except Exception:
             pass
-        return True
 
     def search_resilient(self, query, mode="auto", model=None, sources=["web"],
                          files={}, stream=False, language="en-US", follow_up=None,
                          incognito=False, timeout=None, file_upload_timeout=None):
-        """search() 的出口自愈包装：某个 resin 出口查询失败/超时就换下一个重试（最多 MAX_RETRY 次）。
+        """search() 的出口自愈包装（A方案·跨请求粘性游走）。
 
-        - 透传(不轮换)：出口池<=1 / stream(生成器不便重试) / 带 files(重试会重复上传+扣额度) → 直接单发 search()，行为与旧版一致。
-        - 全程持 self._exit_lock：Client 跨线程共享，串行防并发换 session 互踩(单账号本也不该并发查)。
-        - deadline 卡总时长：所有重试+换出口暖场都算进调用方 budget，绝不超预算(治 deep research×K)。
-        - 每次尝试用较小超时(min(剩余, ATTEMPT_TIMEOUT))，坏出口快弃、好出口够答；命中即粘住当前出口。
-        - 判据对齐 run_query：search() 不抛且返回非空=成功；抛异常/空返回=换出口再试。
-        - AssertionError（输入/额度类）不换出口、直接抛。全试完仍败 → 抛最后错误（交池级处理/降级）。
+        核心思路：好出口稀有、只有真查询验得出、探测=多IP有封号风险，所以：
+        - **不在一发里穷举**：每发只试少量出口(受 TOTAL_BUDGET 封顶，卡进调用方 abort 内)、快速失败。
+        - **失败只挪指针**(self._exit_idx，便宜)，session 惰性重建(_ensure_session)；指针**跨请求持久**，
+          下一发从上次停的地方**继续走**，一格格走遍池子直到命中。
+        - **命中即死死粘住**(idx 不动、session 复用)，之后所有查询都走这个好出口；它挂了才继续走。
+        - 用户真实查询本身就是探针：不额外多IP、不额外烧额度(失败的查询本就会失败)。
+
+        其它：透传(池<=1/stream/带files) / 全程持锁(跨线程共享) / AssertionError 直接抛 /
+        单次超时 min(剩余, ATTEMPT_TIMEOUT)(good 实测~6s、设 15s 足够且坏出口快弃) / 判据=不抛且非空即成功。
         """
         pool_n = len(self._exit_pool)
-        # 透传(不轮换)：无池 / stream(生成器不便重试) / 带 files(重试会重复上传+扣额度)。
+        # 透传(不游走)：无池 / stream(生成器不便重试) / 带 files(重试会重复上传+扣额度)。
         if pool_n <= 1 or stream or files:
             return self.search(
                 query, mode=mode, model=model, sources=sources, files=files,
@@ -148,20 +153,23 @@ class Client:
                 incognito=incognito, timeout=timeout, file_upload_timeout=file_upload_timeout,
             )
 
-        # 全程持锁：Client 跨线程共享，轮换会换 self.session/_exit_idx，串行防并发踩(见 __init__)。
+        # 全程持锁：Client 跨线程共享，游走会换 self.session/_exit_idx，串行防并发踩(见 __init__)。
         with self._exit_lock:
             attempts = min(PERPLEXITY_EXIT_MAX_RETRY, pool_n)
-            floor = MIN_TIMEOUT_SECONDS  # 剩余不足一次最小尝试就停，不硬起一发必超时的尝试
+            floor = MIN_TIMEOUT_SECONDS
             budget = timeout if (timeout and timeout > 0) else get_search_timeout(mode)
-            budget = max(budget, floor)  # 调用方给的 < 系统下限时兜底，保证至少能起一次尝试(否则 last_err=None)
-            # deadline 卡总时长(soft cap)：K 次重试 + 换出口暖场都算进 budget，不再发起超预算的新尝试
-            # (治 deep research×K 灾难；正在跑的 search 不硬 kill，故墙钟可能略超一次 per_attempt)。
+            # 非 deep：把本发总预算封顶到 TOTAL_BUDGET(~50s，卡进调用方 ~60s abort 内；
+            # get_search_timeout 默认 300 远大于真实 abort，不封顶会一发试太久超调用方预算)。
+            if mode != "deep research":
+                budget = min(budget, PERPLEXITY_EXIT_TOTAL_BUDGET)
+            budget = max(budget, floor)  # 兜底保证至少能起一次尝试(否则 last_err=None)
             deadline = time.monotonic() + budget
             last_err = None
             for i in range(attempts):
                 remaining = deadline - time.monotonic()
                 if remaining < floor:
                     break
+                self._ensure_session()  # 把 session 同步到当前(可能上一发/上一次挪过的)出口
                 # deep research 天生慢→给满剩余；其余按 ATTEMPT_TIMEOUT 卡短(坏出口快弃)，但不超剩余。
                 per_attempt = remaining if mode == "deep research" else min(remaining, PERPLEXITY_EXIT_ATTEMPT_TIMEOUT)
                 try:
@@ -173,30 +181,21 @@ class Client:
                     )
                     if res:
                         if i > 0:
-                            logger.info(
-                                "perplexity: exit-pool 第 %d 次重试命中 (exit idx=%d/%d)",
-                                i, self._exit_idx, pool_n,
-                            )
-                        return res  # 好出口 → 粘住(下次仍从此出口起)
+                            logger.info("perplexity: 游走命中好出口 idx=%d/%d，粘住", self._exit_idx, pool_n)
+                        return res  # 好出口 → 粘住(idx 不动、session 复用)
                     last_err = "empty response"
                 except AssertionError:
                     raise
                 except Exception as exc:
                     last_err = exc
-                # 还有下一发且预算够(暖场也吃时间)才换出口
-                if i < attempts - 1 and (deadline - time.monotonic()) >= floor:
-                    if not self._rotate_exit():
-                        break
-                    logger.warning(
-                        "perplexity: 换出口 -> idx=%d/%d 重试 (因: %s)",
-                        self._exit_idx, pool_n, str(last_err)[:120],
-                    )
-                else:
-                    break
+                # 失败 → 挪到下一个出口(仅挪指针，session 惰性重建；指针跨请求持久，下一发继续走)。
+                self._exit_idx = (self._exit_idx + 1) % pool_n
+                logger.warning("perplexity: 出口失败，走到 idx=%d/%d (因: %s)",
+                               self._exit_idx, pool_n, str(last_err)[:100])
 
             if isinstance(last_err, Exception):
                 raise last_err
-            raise RuntimeError(f"perplexity exit-pool 出口池尝试均失败: {last_err}")
+            raise RuntimeError(f"perplexity 出口池游走尝试均失败(idx 现停在 {self._exit_idx}): {last_err}")
 
     @property
     def cookies(self) -> dict:
