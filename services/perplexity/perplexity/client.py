@@ -223,9 +223,18 @@ class Client:
         # Unique timestamp for session identification
         self.timestamp = format(random.getrandbits(32), "08x")
 
-        # Initialize session by making a GET request
+        # Warm the session on construction, but never kill process startup when the
+        # first proxy exit is slow/dead. Real queries go through search_resilient and
+        # can rotate exits; an optional sixth source must not crash :8001 at boot.
         logger.debug("Client initializing auth session via %s", ENDPOINT_AUTH_SESSION)
-        self.session.get(ENDPOINT_AUTH_SESSION, timeout=30)
+        try:
+            self.session.get(ENDPOINT_AUTH_SESSION, timeout=10)
+        except Exception as error:
+            logger.warning(
+                "Client auth warm-up failed on exit idx=%s (%s); deferring to query time",
+                self._exit_idx,
+                type(error).__name__,
+            )
 
     def _build_session(self, proxy_url):
         """Create a fresh curl_cffi session (same cookies + chrome impersonation) on the given proxy."""
