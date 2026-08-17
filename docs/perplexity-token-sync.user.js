@@ -10,7 +10,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
-// @connect      alphaeee-fusionsearch-mcp.hf.space
+// @connect      alphaeee-claw.hf.space
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -32,7 +32,7 @@
   'use strict';
 
   // ====== 改这两处 ======
-  const SYNC_URL = 'https://alphaeee-fusionsearch-mcp.hf.space/api/perplexity/sync-token';
+  const SYNC_URL = 'https://alphaeee-claw.hf.space/api/perplexity/sync-token';
   const SYNC_TOKEN = 'REPLACE_WITH_YOUR_PERPLEXITY_SYNC_TOKEN';
   // ======================
 

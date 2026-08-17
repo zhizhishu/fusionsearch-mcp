@@ -52,6 +52,130 @@ from .emailnator import Emailnator
 logger = logging.getLogger(__name__)
 
 
+def _extract_legacy_text_response(response_payload):
+    """Normalize the legacy ``text`` step list into top-level answer fields."""
+    encoded_text = response_payload.get("text")
+    if not isinstance(encoded_text, str) or not encoded_text:
+        return
+
+    try:
+        parsed_text = json.loads(encoded_text)
+    except (json.JSONDecodeError, TypeError):
+        return
+
+    response_payload["text"] = parsed_text
+    if not isinstance(parsed_text, list):
+        return
+
+    for step in parsed_text:
+        if not isinstance(step, dict) or step.get("step_type") != "FINAL":
+            continue
+        encoded_answer = step.get("content", {}).get("answer")
+        if not isinstance(encoded_answer, str) or not encoded_answer:
+            continue
+        try:
+            answer_payload = json.loads(encoded_answer)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        response_payload["answer"] = answer_payload.get("answer", "")
+        response_payload["chunks"] = answer_payload.get("chunks", [])
+        return
+
+
+def _extract_block_response(response_payload):
+    """Normalize the current Perplexity ``blocks`` response shape.
+
+    Perplexity moved final markdown from ``text[].FINAL.content.answer`` to
+    ``blocks[].markdown_block.answer``. Search sources likewise moved to
+    ``blocks[].web_result_block.web_results``. Keep both formats supported because
+    deployments can briefly serve either shape during upstream rollouts.
+    """
+    blocks = response_payload.get("blocks")
+    if not isinstance(blocks, list):
+        return
+
+    completed_answers = []
+    partial_answers = []
+    web_results = []
+
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+
+        markdown_block = block.get("markdown_block")
+        if isinstance(markdown_block, dict):
+            answer = markdown_block.get("answer")
+            if not isinstance(answer, str) or not answer.strip():
+                markdown_chunks = markdown_block.get("chunks")
+                if isinstance(markdown_chunks, list):
+                    answer = "".join(
+                        chunk for chunk in markdown_chunks if isinstance(chunk, str)
+                    )
+            if isinstance(answer, str) and answer.strip():
+                if str(markdown_block.get("progress", "")).upper() == "DONE":
+                    completed_answers.append(answer)
+                else:
+                    partial_answers.append(answer)
+
+        web_result_block = block.get("web_result_block")
+        if isinstance(web_result_block, dict):
+            block_results = web_result_block.get("web_results")
+            if isinstance(block_results, list):
+                web_results.extend(
+                    result for result in block_results if isinstance(result, dict)
+                )
+
+    answer_candidates = completed_answers or partial_answers
+    if answer_candidates:
+        response_payload["answer"] = answer_candidates[-1]
+    if web_results:
+        response_payload["chunks"] = web_results
+
+
+def normalize_search_response(response_payload):
+    """Return one Perplexity SSE payload with old and new response shapes normalized."""
+    if not isinstance(response_payload, dict):
+        return response_payload
+    _extract_legacy_text_response(response_payload)
+    _extract_block_response(response_payload)
+    return response_payload
+
+
+def _has_nonempty_answer(response_payload):
+    return isinstance(response_payload, dict) and bool(
+        str(response_payload.get("answer") or "").strip()
+    )
+
+
+def _require_nonempty_answer(response_payload):
+    if not _has_nonempty_answer(response_payload):
+        raise RuntimeError("Perplexity response contained no answer")
+    return response_payload
+
+
+def _parse_sse_message(content):
+    """Parse one complete SSE event block and normalize message payloads."""
+    normalized_content = content.replace("\r\n", "\n")
+    lines = normalized_content.split("\n")
+    event_name = next(
+        (line[len("event:") :].strip() for line in lines if line.startswith("event:")),
+        "",
+    )
+    if event_name != "message":
+        return event_name, None
+
+    data_lines = [
+        line[len("data:") :].strip() for line in lines if line.startswith("data:")
+    ]
+    if not data_lines:
+        return event_name, None
+    try:
+        response_payload = json.loads("\n".join(data_lines))
+    except json.JSONDecodeError:
+        return event_name, None
+    return event_name, normalize_search_response(response_payload)
+
+
 class Client:
     """
     A client for interacting with the Perplexity AI API.
@@ -179,11 +303,11 @@ class Client:
                         incognito=incognito, timeout=per_attempt,
                         file_upload_timeout=file_upload_timeout,
                     )
-                    if res:
+                    if _has_nonempty_answer(res):
                         if i > 0:
                             logger.info("perplexity: 游走命中好出口 idx=%d/%d，粘住", self._exit_idx, pool_n)
                         return res  # 好出口 → 粘住(idx 不动、session 复用)
-                    last_err = "empty response"
+                    last_err = "response contained no answer"
                 except AssertionError:
                     raise
                 except Exception as exc:
@@ -444,72 +568,35 @@ class Client:
             """
             for chunk in resp.iter_lines(delimiter=b"\r\n\r\n"):
                 content = chunk.decode("utf-8")
-
-                if content.startswith("event: message\r\n"):
-                    try:
-                        content_json = json.loads(content[len("event: message\r\ndata: ") :])
-
-                        # Parse the nested 'text' field if it exists
-                        if "text" in content_json and content_json["text"]:
-                            try:
-                                text_parsed = json.loads(content_json["text"])
-                                # Extract answer from FINAL step if available
-                                if isinstance(text_parsed, list):
-                                    for step in text_parsed:
-                                        if step.get("step_type") == "FINAL":
-                                            final_content = step.get("content", {})
-                                            if "answer" in final_content:
-                                                answer_data = json.loads(final_content["answer"])
-                                                content_json["answer"] = answer_data.get(
-                                                    "answer", ""
-                                                )
-                                                content_json["chunks"] = answer_data.get(
-                                                    "chunks", []
-                                                )
-                                                break
-                                content_json["text"] = text_parsed
-                            except (json.JSONDecodeError, TypeError, KeyError):
-                                pass
-
-                        chunks.append(content_json)
-                        yield chunks[-1]
-                    except (json.JSONDecodeError, KeyError):
-                        continue
-
-                elif content.startswith("event: end_of_stream\r\n"):
+                event_name, response_payload = _parse_sse_message(content)
+                if event_name == "message" and response_payload is not None:
+                    chunks.append(response_payload)
+                    yield response_payload
+                elif event_name == "end_of_stream":
                     return
 
         if stream:
             return stream_response(resp)
 
+        latest_response = {}
+        latest_answer_response = None
+        latest_sources = []
         for chunk in resp.iter_lines(delimiter=b"\r\n\r\n"):
             content = chunk.decode("utf-8")
+            event_name, response_payload = _parse_sse_message(content)
+            if event_name == "message" and response_payload is not None:
+                chunks.append(response_payload)
+                latest_response = response_payload
+                response_sources = response_payload.get("chunks")
+                if isinstance(response_sources, list) and response_sources:
+                    latest_sources = response_sources
+                    if latest_answer_response is not None:
+                        latest_answer_response["chunks"] = latest_sources
+                if _has_nonempty_answer(response_payload):
+                    if latest_sources and not response_payload.get("chunks"):
+                        response_payload["chunks"] = latest_sources
+                    latest_answer_response = response_payload
+            elif event_name == "end_of_stream":
+                return _require_nonempty_answer(latest_answer_response or latest_response)
 
-            if content.startswith("event: message\r\n"):
-                try:
-                    content_json = json.loads(content[len("event: message\r\ndata: ") :])
-
-                    # Parse the nested 'text' field if it exists
-                    if "text" in content_json and content_json["text"]:
-                        try:
-                            text_parsed = json.loads(content_json["text"])
-                            # Extract answer from FINAL step if available
-                            if isinstance(text_parsed, list):
-                                for step in text_parsed:
-                                    if step.get("step_type") == "FINAL":
-                                        final_content = step.get("content", {})
-                                        if "answer" in final_content:
-                                            answer_data = json.loads(final_content["answer"])
-                                            content_json["answer"] = answer_data.get("answer", "")
-                                            content_json["chunks"] = answer_data.get("chunks", [])
-                                            break
-                            content_json["text"] = text_parsed
-                        except (json.JSONDecodeError, TypeError, KeyError):
-                            pass
-
-                    chunks.append(content_json)
-                except (json.JSONDecodeError, KeyError):
-                    continue
-
-            elif content.startswith("event: end_of_stream\r\n"):
-                return chunks[-1] if chunks else {}
+        return _require_nonempty_answer(latest_answer_response or latest_response)
