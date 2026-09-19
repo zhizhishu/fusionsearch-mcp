@@ -55,6 +55,7 @@ const fields = {
   search2apiRuntimeState: $('#search2apiRuntimeState'),
   search2apiStatusHint: $('#search2apiStatusHint'),
   grokApiUrl: $('#grokApiUrl'),
+  grokEnvLock: $('#grokEnvLock'),
   grokModel: $('#grokModel'),
   grokModelList: $('#grokModelList'),
   grokModelHint: $('#grokModelHint'),
@@ -333,7 +334,10 @@ const KEY_CENTER_META = {
   libresearchEndpoint: { editable: false, hf: false },
   search2apiBearer: { editable: true, hf: true, clear: true },
   search2apiCookie: { editable: true, hf: true, clear: false, note: '环境变量 · 存后需重启 Space 生效' },
-  grokApiKey: { editable: true, hf: true, clear: true },
+  // Grok 端点/模型是 HF Variables（非机密）：保存后即刻生效并写回 HF，避免重启回滚旧值。
+  grokApiUrl: { editable: true, hf: true, clear: false, plain: true, note: 'HF Variables · 保存即生效并写回；带上 /v1 前缀' },
+  grokModel: { editable: true, hf: true, clear: false, plain: true, note: 'HF Variables · 逗号分隔＝降级链，第 1 个是主模型' },
+  grokApiKey: { editable: true, hf: true, clear: true, note: 'HF Secret · 保存即生效并写回' },
   tavilyApiKey: { editable: true, hf: true, clear: true },
   tavilyMcpToken: { editable: true, hf: true, clear: true },
   firecrawlApiKey: { editable: true, hf: true, clear: true },
@@ -359,7 +363,7 @@ function renderKeyStatus(items = []) {
       const editor = meta.editable
         ? `
         <div class="key-edit">
-          <input class="key-edit-input" type="password" autocomplete="new-password" placeholder="留空则不改，输入即替换" data-key-id="${escapeHtml(item.id)}" />
+          <input class="key-edit-input" type="${meta.plain ? 'text' : 'password'}" autocomplete="new-password" placeholder="留空则不改，输入即替换" data-key-id="${escapeHtml(item.id)}" />
           ${meta.clear ? `<label class="key-clear"><input type="checkbox" class="key-clear-box" data-key-id="${escapeHtml(item.id)}" />清空</label>` : ''}
         </div>
         ${meta.note ? `<small class="key-note">${escapeHtml(meta.note)}</small>` : ''}`
@@ -620,6 +624,14 @@ async function loadConfig() {
     fields.mcpAuthState.textContent = config.auth?.mcpAuthEnabled ? '已启用' : '未启用';
   }
   fields.grokApiUrl.value = config.fusion?.grokApiUrl || '';
+  // 这一栏最容易踩的坑：HF 里有同名环境变量时 env 优先于 runtime.json，直接改只活到重启。
+  const lockedGrok = ['grokApiUrl', 'grokModel'].filter((key) => config.envOverrides?.[key]);
+  if (fields.grokEnvLock) {
+    fields.grokEnvLock.hidden = !lockedGrok.length;
+    fields.grokEnvLock.textContent = lockedGrok.length
+      ? `⚠ ${lockedGrok.join(' / ')} 由 HF 环境变量注入（env 优先于运行时配置）：直接改这里只对本次运行有效，重启会被 HF 上旧值覆盖。勾上下面「同步到 HF」再保存才会连 HF 一起改掉。`
+      : '';
+  }
   fields.grokModel.value = config.fusion?.grokModel || 'grok-4.20-beta';
   renderGrokModels([], { source: '当前配置' });
   fields.grokSystemPrompt.value = config.fusion?.grokSystemPrompt || defaultGrokSystemPrompt;
@@ -685,10 +697,11 @@ async function saveConfig() {
   renderKeyStatus(config.keyStatus || []);
   if (fields.grokHfToken) fields.grokHfToken.value = '';
   if (config.hfSync?.requested) {
-    const synced = config.hfSync.ok && config.hfSync.updatedKeys?.includes('GROK_MODEL');
-    fields.saveHint.textContent = synced
-      ? '已保存，GROK_MODEL 已同步到 HF Secrets'
-      : `已保存，但 HF Secrets 未同步：${config.hfSync.error?.message || '请检查 HF_WRITE_TOKEN'}`;
+    const syncedKeys = config.hfSync.updatedKeys || [];
+    const failedKeys = (config.hfSync.results || []).filter((item) => !item.ok).map((item) => item.key);
+    fields.saveHint.textContent = config.hfSync.ok
+      ? `已保存，${syncedKeys.join(' + ') || 'HF'} 已写回 HF`
+      : `已保存，但 HF 未同步：${config.hfSync.error?.message || failedKeys.join(', ') || '请检查 HF_WRITE_TOKEN'}`;
     renderOutput({
       ok: true,
       grokModel: config.fusion?.grokModel,
@@ -700,7 +713,7 @@ async function saveConfig() {
         error: config.hfSync.error
       }
     });
-    setStatus(synced ? 'HF 已同步' : 'HF 未同步', synced ? 'ok' : 'fail');
+    setStatus(config.hfSync.ok ? 'HF 已同步' : 'HF 未同步', config.hfSync.ok ? 'ok' : 'fail');
   } else {
     fields.saveHint.textContent = '已保存';
     setStatus('已保存', 'ok');

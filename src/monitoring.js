@@ -76,6 +76,10 @@ export function buildKeyStatus(config = {}) {
     endpointStatus('libresearchEndpoint', 'LibreSearch Endpoint', config.searchEndpoint, ['SEARCH_ENDPOINT']),
     secretStatus('search2apiBearer', 'Search-2api Bearer', config.searchShApiKey, ['SEARCH_SH_API_KEY', 'API_MASTER_KEY']),
     cookieStatus('search2apiCookie', 'Search-2api Cookie', process.env.SEARCH_SH_COOKIE || ''),
+    // Grok 端点/模型在 HF 上是 Variables，而 env 优先于 runtime.json —— 这两行必须能在
+    // 密钥中心直接改并写回，否则 UI 改了重启就回滚（看起来"改不动"）。
+    endpointStatus('grokApiUrl', 'Grok API URL', fusion.grokApiUrl, ['GROK_API_URL']),
+    endpointStatus('grokModel', 'Grok 模型链', fusion.grokModel, ['GROK_MODEL']),
     secretStatus('grokApiKey', 'Grok API Key', fusion.grokApiKey, ['GROK_API_KEY']),
     secretStatus('tavilyApiKey', 'Tavily REST Key', fusion.tavilyApiKey, ['TAVILY_API_KEY']),
     secretStatus('tavilyMcpToken', 'Tavily MCP Token', fusion.tavilyMcpToken, ['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN']),
@@ -105,6 +109,8 @@ export function buildKeyReveal(config = {}) {
     libresearchEndpoint: pick(['SEARCH_ENDPOINT'], config.searchEndpoint),
     search2apiBearer: pick(['SEARCH_SH_API_KEY', 'API_MASTER_KEY'], config.searchShApiKey),
     search2apiCookie: pick(['SEARCH_SH_COOKIE'], ''),
+    grokApiUrl: pick(['GROK_API_URL'], fusion.grokApiUrl),
+    grokModel: pick(['GROK_MODEL'], fusion.grokModel),
     grokApiKey: pick(['GROK_API_KEY'], fusion.grokApiKey),
     tavilyApiKey: pick(['TAVILY_API_KEY'], fusion.tavilyApiKey),
     tavilyMcpToken: pick(['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN'], fusion.tavilyMcpToken),

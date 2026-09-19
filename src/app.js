@@ -120,18 +120,37 @@ const HF_SECRET_OPTIONS = [
 ];
 const HF_SECRET_KEYS = HF_SECRET_OPTIONS.map((item) => item.key);
 
+// HF Space 的配置分两类存储：secrets（隐藏值）与 variables（明文可见）。**同一个 key 同时
+// 出现在两类里，HF 会直接拒绝注入配置**：runtime.stage 变 CONFIG_ERROR，报
+// "Collision on variables and secrets names"，整个 Space 起不来。2026-07 线上 alphaeee/claw
+// 就是这么挂的——Admin 保存 Grok 模型时用 /secrets 端点写了 GROK_MODEL，而它在 Space 里
+// 本来是 Variable。
+//
+// 又因为 src/server.js 是 `process.env.X ?? runtimeConfig.X`，env 永远盖过 runtime.json：
+// 写错类型 = 用户改完看着生效、重启即回滚，表现出来就是"改不动"。
+// 规则：真密钥走 secrets；端点 / 模型 / 开关这类非机密值走 variables。
+// 写入时以该 key 在 HF 上的**既有类型**为准（见 writeHfEntries），两边都没有才用下面的默认。
+const HF_VARIABLE_KEYS = new Set([
+  'GROK_API_URL',
+  'GROK_MODEL'
+]);
+
 // Single source of truth for the unified key center (PUT /api/admin/keys). Maps each
 // buildKeyStatus row id to how it is applied. kind:
 //   'plain'    → runtime config only, NOT written to HF Secrets (endpoints belong in
 //                Variables; writing them as Secrets would risk a name collision).
 //   'secret'   → runtime config + (default) HF Secret write-back.
-//   'env-only' → no runtime field; HF Secret write-back only (needs restart to apply).
+//   'env-only' → no runtime field; HF write-back only (needs restart to apply).
+//   'variable' → runtime field + HF Variables write-back (endpoints/models are not secrets;
+//                writing them as Secrets collides with the existing Variable and bricks the Space).
 //   'admin'    → admin login token: runtime + auth.update + session rotation + re-login.
 //   'mcp'      → MCP bearer: runtime + auth.update; clearable to disable MCP auth.
 const KEY_CENTER_FIELDS = {
   libresearchEndpoint: { configField: 'searchEndpoint', hfKey: 'SEARCH_ENDPOINT', kind: 'plain' },
   search2apiBearer: { configField: 'searchShApiKey', hfKey: 'SEARCH_SH_API_KEY', kind: 'secret' },
   search2apiCookie: { configField: null, hfKey: 'SEARCH_SH_COOKIE', kind: 'env-only' },
+  grokApiUrl: { configField: 'grokApiUrl', hfKey: 'GROK_API_URL', kind: 'variable' },
+  grokModel: { configField: 'grokModel', hfKey: 'GROK_MODEL', kind: 'variable' },
   grokApiKey: { configField: 'grokApiKey', hfKey: 'GROK_API_KEY', kind: 'secret' },
   tavilyApiKey: { configField: 'tavilyApiKey', hfKey: 'TAVILY_API_KEY', kind: 'secret' },
   tavilyMcpToken: { configField: 'tavilyMcpToken', hfKey: 'TAVILY_MCP_TOKEN', kind: 'secret' },
@@ -586,13 +605,16 @@ function createHfHeaders(token) {
   };
 }
 
-function createHfSecretsUrl(config) {
+function createHfConfigUrl(config, kind = 'secret') {
   const repoId = resolveHfSpaceId(config);
   if (!repoId) return '';
-  return `${resolveHfEndpoint(config)}/api/spaces/${repoId}/secrets`;
+  const section = kind === 'variable' ? 'variables' : 'secrets';
+  return `${resolveHfEndpoint(config)}/api/spaces/${repoId}/${section}`;
 }
 
-function normalizeHfSecretRows(payload) {
+// Raw rows from either endpoint, whitelist NOT applied — collision detection needs to see
+// keys this app does not manage too.
+function normalizeHfRows(payload) {
   if (!payload || typeof payload !== 'object') return [];
   const source = Array.isArray(payload)
     ? payload
@@ -606,11 +628,18 @@ function normalizeHfSecretRows(payload) {
       description: item?.description || '',
       updatedAt: item?.updatedAt || item?.updated_at || item?.updatedAtTimestamp || null
     }))
-    .filter((item) => HF_SECRET_KEYS.includes(item.key));
+    .filter((item) => item.key);
 }
 
-async function requestHfJson(config, { method = 'GET', token, body } = {}) {
-  const url = createHfSecretsUrl(config);
+function normalizeHfSecretRows(payload) {
+  return normalizeHfRows(payload).filter((item) => HF_SECRET_KEYS.includes(item.key));
+}
+
+// HF 只有集合端点：GET/POST/DELETE 都是 /api/spaces/{repo}/secrets|variables，
+// 删除靠 body `{"key": name}`，没有 /secrets/{key} 这种子路径
+// （见 huggingface_hub `delete_space_secret` / `delete_space_variable`）。
+async function requestHfJson(config, { method = 'GET', token, body, kind = 'secret' } = {}) {
+  const url = createHfConfigUrl(config, kind);
   if (!url) {
     const error = new Error('HF_SPACE_ID is not configured');
     error.status = 400;
@@ -643,20 +672,58 @@ async function requestHfJson(config, { method = 'GET', token, body } = {}) {
   return payload;
 }
 
-async function writeHfSecrets(config, { token, secrets }) {
+// Writes HF Space config, one request per key. Before writing it reads (once per call) which
+// keys live as secrets and as variables, then:
+//   1. when a key exists on both sides the Space is already collided — keep the semantically
+//      right side (HF_VARIABLE_KEYS → variable) and DELETE the twin, otherwise HF keeps
+//      refusing to inject config (runtime.stage = CONFIG_ERROR);
+//   2. otherwise follow the side the key already lives on, so a write never creates a collision;
+//   3. POST to the matching endpoint, defaulting to HF_VARIABLE_KEYS for brand-new keys.
+export async function writeHfEntries(config, { token, entries }) {
   const results = [];
-  for (const item of secrets) {
+  let known = null;
+  const loadKnown = async () => {
+    const state = { secret: new Set(), variable: new Set() };
+    for (const kind of ['secret', 'variable']) {
+      try {
+        const payload = await requestHfJson(config, { token, kind });
+        state[kind] = new Set(normalizeHfRows(payload).map((row) => row.key));
+      } catch (error) {
+        logEvent('warn', 'hf-secrets', 'HF config listing failed', {
+          kind,
+          error: String(error?.message || error)
+        });
+      }
+    }
+    return state;
+  };
+
+  for (const item of entries) {
     try {
+      known = known ?? (await loadKnown());
+      const preferred = HF_VARIABLE_KEYS.has(item.key) ? 'variable' : 'secret';
+      const twin = preferred === 'variable' ? 'secret' : 'variable';
+      if (known[preferred].has(item.key) && known[twin].has(item.key)) {
+        await requestHfJson(config, { method: 'DELETE', token, kind: twin, body: { key: item.key } });
+        known[twin].delete(item.key);
+        logEvent('warn', 'hf-secrets', 'Removed duplicate HF config entry (name collision)', {
+          key: item.key,
+          removedKind: twin
+        });
+      }
+      const kind = known[preferred].has(item.key) ? preferred : known[twin].has(item.key) ? twin : preferred;
       await requestHfJson(config, {
         method: 'POST',
         token,
+        kind,
         body: {
           key: item.key,
           value: item.value,
           description: item.description || HF_SECRET_OPTIONS.find((option) => option.key === item.key)?.label || ''
         }
       });
-      results.push({ key: item.key, ok: true });
+      known[kind].add(item.key);
+      results.push({ key: item.key, ok: true, type: kind });
     } catch (error) {
       results.push({ key: item.key, ok: false, error: formatHfApiError(error) });
     }
@@ -2292,7 +2359,7 @@ export function createApp(userConfig = {}) {
       } else if (!token) {
         hfSync.error = { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN is not configured' };
       } else if (secrets.length) {
-        hfSync.results = await writeHfSecrets(config, { token, secrets });
+        hfSync.results = await writeHfEntries(config, { token, entries: secrets });
         hfSync.updatedKeys = hfSync.results.filter((item) => item.ok).map((item) => item.key);
         hfSync.ok = hfSync.results.every((item) => item.ok);
       } else {
@@ -2427,12 +2494,12 @@ export function createApp(userConfig = {}) {
         continue;
       }
 
-      // 'plain' + 'secret': update runtime config field.
+      // 'plain' + 'secret' + 'variable': update runtime config field.
       if (spec.configField) {
         config[spec.configField] = clear ? '' : value;
       }
       changed.push(edit.id);
-      if (spec.kind === 'secret' && !clear && value) {
+      if ((spec.kind === 'secret' || spec.kind === 'variable') && !clear && value) {
         applied.push({ id: edit.id, hfKey: spec.hfKey, value });
       }
     }
@@ -2480,7 +2547,7 @@ export function createApp(userConfig = {}) {
       } else if (!token) {
         hfSync.error = { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN is not configured' };
       } else {
-        hfSync.results = await writeHfSecrets(config, { token, secrets: secretsToWrite });
+        hfSync.results = await writeHfEntries(config, { token, entries: secretsToWrite });
         hfSync.updatedKeys = hfSync.results.filter((item) => item.ok).map((item) => item.key);
         hfSync.failedKeys = hfSync.results.filter((item) => !item.ok).map((item) => item.key);
         hfSync.ok = hfSync.results.every((item) => item.ok);
@@ -2657,16 +2724,22 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       } else if (!token) {
         hfSync.error = { code: 'HF_WRITE_TOKEN_MISSING', message: 'HF_WRITE_TOKEN is not configured' };
       } else {
-        hfSync.results = await writeHfSecrets(config, {
-          token,
-          secrets: [
-            {
-              key: 'GROK_MODEL',
-              value: config.grokModel || DEFAULT_CONFIG.grokModel,
-              description: 'Default Grok model'
-            }
-          ]
-        });
+        // URL + model are non-secret endpoints/models: they live in HF Variables, and writing
+        // them as Secrets is exactly what collides with the existing Variable of the same name.
+        // writeHfEntries picks the existing type and clears a duplicate twin if one exists.
+        const grokEntries = [
+          {
+            key: 'GROK_API_URL',
+            value: config.grokApiUrl || '',
+            description: 'Grok/OpenAI-compatible URL'
+          },
+          {
+            key: 'GROK_MODEL',
+            value: config.grokModel || DEFAULT_CONFIG.grokModel,
+            description: 'Default Grok model'
+          }
+        ].filter((item) => item.value);
+        hfSync.results = await writeHfEntries(config, { token, entries: grokEntries });
         hfSync.updatedKeys = hfSync.results.filter((item) => item.ok).map((item) => item.key);
         hfSync.ok = hfSync.results.every((item) => item.ok);
       }
@@ -2757,7 +2830,7 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       return;
     }
 
-    const results = await writeHfSecrets(config, { token, secrets: input.secrets });
+    const results = await writeHfEntries(config, { token, entries: input.secrets });
 
     const ok = results.every((item) => item.ok);
     const successfulKeys = new Set(results.filter((item) => item.ok).map((item) => item.key));

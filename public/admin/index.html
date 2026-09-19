@@ -241,6 +241,7 @@
                 <input id="grokApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/v1" />
               </label>
               <p class="inline-hint">🔑 Grok API Key 到「密钥中心」统一查看 / 修改。</p>
+              <p class="inline-hint span-2" id="grokEnvLock" hidden></p>
               <label class="field">
                 <span>模型顺序（逗号分隔）</span>
                 <input id="grokModel" type="text" autocomplete="off" spellcheck="false" placeholder="grok-4.5,grok-4.3-fast" />
@@ -267,7 +268,7 @@
               </div>
               <label class="check-row span-2">
                 <input id="syncGrokHfSecrets" type="checkbox" checked />
-                <span>保存时同步 `GROK_MODEL` 到 Hugging Face Secrets，防止 Space 重启恢复旧模型</span>
+                <span>保存时把 `GROK_API_URL` + `GROK_MODEL` 写回 Hugging Face（Variables），防止 Space 重启恢复旧值</span>
               </label>
               <label class="field span-2" id="grokHfTokenField">
                 <span>一次性 HF Write Token</span>
