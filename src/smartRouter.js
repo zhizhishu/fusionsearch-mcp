@@ -5,6 +5,7 @@ import {
   executeTavilyExtractOnly,
   executeTavilySearchOnly
 } from './fusionClients.js';
+import { executeSerperSearch } from './serperClient.js';
 import {
   buildEvidencePipeline,
   buildFetchSynthesisPrompt,
@@ -235,7 +236,7 @@ export async function executeSmartResearch({
     }
   };
 
-  const [libre, search2api, tavily, perplexity] = await Promise.all([
+  const [libre, search2api, tavily, perplexity, serper] = await Promise.all([
     run('libresearch', 'LibreSearch 搜索', async () => {
       const { payload, params } = await executeSearch({
         endpoint: config.searchEndpoint,
@@ -252,7 +253,8 @@ export async function executeSmartResearch({
     }),
     run('search2api', 'Search-2api 答案', () => callSearch2Api(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 90_000) })),
     run('tavily', 'Tavily Search', () => executeTavilySearchOnly({ config, query, maxResults: effectiveLimit })),
-    run('perplexity', 'Perplexity 答案', () => callPerplexity(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 60_000) }))
+    run('perplexity', 'Perplexity 答案', () => callPerplexity(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 60_000) })),
+    run('serper', 'Serper Google SERP', () => executeSerperSearch({ config, query, maxResults: effectiveLimit, timeoutMs: Math.min(timeoutMs, 20_000) }))
   ]);
 
   if (libre.ok) {
@@ -304,6 +306,19 @@ export async function executeSmartResearch({
     const content = `## Perplexity\n失败: ${perplexity.error}`;
     evidence.push(content);
     evidenceBlocks.push({ provider: 'perplexity', title: 'Perplexity error', content });
+  }
+
+  if (serper.ok) {
+    const content = serper.value.content;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'serper', title: 'Serper Google SERP', content });
+    if (Array.isArray(serper.value.sources) && serper.value.sources.length) {
+      sourceGroups.push(serper.value.sources);
+    }
+  } else if (!/未配置/.test(serper.error || '')) {
+    const content = `## Serper\n失败: ${serper.error}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'serper', title: 'Serper error', content });
   }
 
   let sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);

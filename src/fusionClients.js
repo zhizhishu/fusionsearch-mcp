@@ -1,6 +1,7 @@
 import { mergeSources, splitAnswerAndSources } from './sourceCache.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { getSerperPublicConfig } from './serperClient.js';
 
 const DEFAULT_GROK_MODEL = 'grok-4.20-beta';
 const DEFAULT_TAVILY_API_URL = 'https://api.tavily.com';
@@ -103,7 +104,8 @@ export function getFusionPublicConfig(config = {}) {
     hasTavilyApiKey: Boolean(resolved.tavilyApiKey),
     hasTavilyMcpToken: Boolean(resolved.tavilyMcpToken),
     hasTavilyCredentials: hasTavilyAccess(resolved),
-    hasFirecrawlApiKey: Boolean(resolved.firecrawlApiKey)
+    hasFirecrawlApiKey: Boolean(resolved.firecrawlApiKey),
+    ...getSerperPublicConfig(config)
   };
 }
 

@@ -78,6 +78,12 @@ const { app, monitoring } = createApp({
   tavilyMcpMapTool: process.env.TAVILY_MCP_MAP_TOOL ?? runtimeConfig.tavilyMcpMapTool,
   firecrawlApiUrl: process.env.FIRECRAWL_API_URL ?? runtimeConfig.firecrawlApiUrl,
   firecrawlApiKey: process.env.FIRECRAWL_API_KEY ?? runtimeConfig.firecrawlApiKey,
+  serperEnabled:
+    process.env.SERPER_ENABLED !== undefined
+      ? ['true', '1', 'yes'].includes(process.env.SERPER_ENABLED.toLowerCase())
+      : runtimeConfig.serperEnabled,
+  serperApiUrl: process.env.SERPER_API_URL ?? runtimeConfig.serperApiUrl,
+  serperApiKey: process.env.SERPER_API_KEY ?? runtimeConfig.serperApiKey,
   hfEndpoint: process.env.HF_ENDPOINT ?? runtimeConfig.hfEndpoint,
   hfSpaceId: process.env.HF_SPACE_ID ?? process.env.SPACE_ID ?? runtimeConfig.hfSpaceId,
   logDir: process.env.LOG_DIR ?? runtimeConfig.logDir,

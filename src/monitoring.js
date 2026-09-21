@@ -1,5 +1,6 @@
 import { executeSearch } from './searchClient.js';
 import { fetchAvailableModels, getFusionPublicConfig, resolveFusionConfig, executeTavilySearchOnly, executeFirecrawlFetch } from './fusionClients.js';
+import { getSerperPublicConfig } from './serperClient.js';
 import { logEvent } from './logger.js';
 
 const MONITORED_SERVICES = [
@@ -8,7 +9,8 @@ const MONITORED_SERVICES = [
   { id: 'grok', name: 'Grok', type: 'ai/api' },
   { id: 'tavily', name: 'Tavily', type: 'search/fetch/map' },
   { id: 'firecrawl', name: 'Firecrawl', type: 'scrape/api' },
-  { id: 'perplexity', name: 'Perplexity', type: 'ai/chat' }
+  { id: 'perplexity', name: 'Perplexity', type: 'ai/chat' },
+  { id: 'serper', name: 'Serper', type: 'google/serp' }
 ];
 const PROBE_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -84,6 +86,8 @@ export function buildKeyStatus(config = {}) {
     secretStatus('tavilyApiKey', 'Tavily REST Key', fusion.tavilyApiKey, ['TAVILY_API_KEY']),
     secretStatus('tavilyMcpToken', 'Tavily MCP Token', fusion.tavilyMcpToken, ['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN']),
     secretStatus('firecrawlApiKey', 'Firecrawl Key', fusion.firecrawlApiKey, ['FIRECRAWL_API_KEY']),
+    endpointStatus('serperApiUrl', 'Serper API URL', config.serperApiUrl, ['SERPER_API_URL']),
+    secretStatus('serperApiKey', 'Serper API Key', config.serperApiKey, ['SERPER_API_KEY']),
     secretStatus('adminToken', 'Admin Token', config.adminToken, ['ADMIN_TOKEN']),
     secretStatus('mcpAuthToken', 'MCP Token', config.mcpAuthToken, ['MCP_AUTH_TOKEN']),
     // resin 代理出口(env-only,改后需重启生效)——masked 只显示平台名+出口数,不露 token
@@ -115,6 +119,8 @@ export function buildKeyReveal(config = {}) {
     tavilyApiKey: pick(['TAVILY_API_KEY'], fusion.tavilyApiKey),
     tavilyMcpToken: pick(['TAVILY_MCP_TOKEN', 'TAVILY_HIKARI_TOKEN'], fusion.tavilyMcpToken),
     firecrawlApiKey: pick(['FIRECRAWL_API_KEY'], fusion.firecrawlApiKey),
+    serperApiUrl: pick(['SERPER_API_URL'], config.serperApiUrl),
+    serperApiKey: pick(['SERPER_API_KEY'], config.serperApiKey),
     adminToken: pick(['ADMIN_TOKEN'], config.adminToken),
     mcpAuthToken: pick(['MCP_AUTH_TOKEN'], config.mcpAuthToken),
     search2apiBaseUrl: pick(['SEARCH_SH_BASE_URL'], ''),
@@ -185,7 +191,8 @@ export async function runMonitoringProbe({ config, monitor, force = false }) {
     probeGrok(config, state),
     probeTavily(config, state),
     probeFirecrawl(config, state),
-    probePerplexity(config, state)
+    probePerplexity(config, state),
+    probeSerper(config, state)
   ]);
 
   return {
@@ -242,6 +249,7 @@ function isServiceConfigured(id, config, fusion, keyStatus) {
   if (id === 'tavily') return Boolean(fusion.tavilyEnabled && fusion.hasTavilyCredentials);
   if (id === 'firecrawl') return Boolean(fusion.hasFirecrawlApiKey);
   if (id === 'perplexity') return Boolean(config.perplexityApiUrl);
+  if (id === 'serper') return Boolean(getSerperPublicConfig(config).hasSerperAccess);
   return false;
 }
 
@@ -399,6 +407,22 @@ async function probePerplexity(config, monitor) {
       });
     }
   }
+}
+
+// Serper 是**按次计费**的协议源（注册送 2500 次，用尽即断）：自动探针绝不真发搜索 ——
+// 30 分钟一次真探针＝一个月约 1400 次，两个月就把免费额度烧光。这里只做配置检查，
+// 真连通性验证留给 admin 手动「测试连通」(POST /api/admin/test/serper)，一次只花 1 credit。
+async function probeSerper(config, monitor) {
+  const serper = getSerperPublicConfig(config);
+  if (!serper.hasSerperAccess) {
+    monitor.record('serper', { status: 'paused', message: 'Serper 未配置 API Key', source: 'probe' });
+    return;
+  }
+  monitor.record('serper', {
+    status: 'up',
+    message: 'Serper 已配置（配置检查，未真发搜索；连通性请点「测试连通」）',
+    source: 'probe'
+  });
 }
 
 async function fetchWithTimeout(url, { headers, timeoutMs = 8000 } = {}) {

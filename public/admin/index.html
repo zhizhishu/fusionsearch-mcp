@@ -102,6 +102,7 @@
               <button class="subnav-item" type="button" data-subview="tavily">Tavily</button>
               <button class="subnav-item" type="button" data-subview="firecrawl">Firecrawl</button>
               <button class="subnav-item" type="button" data-subview="perplexity">Perplexity</button>
+              <button class="subnav-item" type="button" data-subview="serper">Serper</button>
             </div>
             <div class="subnav-group" data-subnav-group="mcp" hidden>
               <button class="subnav-item active" type="button" data-subview="full">Fusion MCP</button>
@@ -121,6 +122,7 @@
               <button class="subnav-item" type="button" data-subview="tavily-test">Tavily</button>
               <button class="subnav-item" type="button" data-subview="firecrawl-test">Firecrawl</button>
               <button class="subnav-item" type="button" data-subview="perplexity-test">Perplexity</button>
+              <button class="subnav-item" type="button" data-subview="serper-test">Serper</button>
             </div>
             <div class="subnav-group" data-subnav-group="status" hidden>
               <button class="subnav-item active" type="button" data-subview="monitoring">健康看板</button>
@@ -433,6 +435,29 @@
               </div>
             </section>
 
+            <section class="panel view-panel" data-group-panel="fusion" data-view-panel="serper" hidden>
+              <div class="panel-title">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+                <h2>Serper</h2>
+              </div>
+              <p class="panel-note">第 7 源。纯协议 Google SERP API——不跑浏览器、不用代理池，机房 IP 撞反爬这条病根整条绕开。注册送 2500 次额度。</p>
+              <label class="field">
+                <span>API Base URL</span>
+                <input id="serperApiUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://google.serper.dev" />
+                <small>默认 https://google.serper.dev，一般不用改。🔑 API Key 到「密钥中心」改。</small>
+              </label>
+              <div class="kv-list compact">
+                <div><span>接入状态</span><strong id="serperConfiguredState">-</strong></div>
+              </div>
+              <div class="test-row">
+                <button class="soft-button" id="testSerper" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+                  测试连通
+                </button>
+                <span class="inline-hint" id="serperTestHint">发一次真实搜索（消耗 1 credit），确认 Key 与额度正常。</span>
+              </div>
+            </section>
+
             <section class="panel view-panel" data-group-panel="mcp" data-view-panel="full" hidden>
               <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M7 12h10M9 17h6" /></svg><h2>Fusion MCP</h2></div>
               <p class="panel-note">统一入口 `/mcp`。工具精简为 6 个——智能工具在服务端自动编排 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 五层能力并交叉取证，不用客户端在一堆同义工具里挑。</p>
@@ -567,16 +592,28 @@
                 </button>
               </div>
             </section>
+            <section class="panel view-panel" data-group-panel="tests" data-view-panel="serper-test" hidden>
+              <div class="panel-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg><h2>Serper 测试</h2></div>
+              <p class="panel-note">验证 Serper 协议 Key 与额度。每次真发搜索消耗 1 credit，未配 Key 时自动跳过，不影响另外六源。</p>
+              <div class="test-row">
+                <input id="testSerperQuery" type="text" value="latest AI search news" autocomplete="off" />
+                <button class="primary-button" id="testSerperFromTests" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" /></svg>
+                  测试连通
+                </button>
+              </div>
+              <span class="inline-hint" id="serperTestFromTestsHint">点击测试连通性</span>
+            </section>
 
             <section class="panel view-panel" data-group-panel="status" data-view-panel="monitoring" hidden>
               <div class="panel-title">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16v-3" /></svg>
                 <h2>健康看板</h2>
               </div>
-              <p class="panel-note">这儿盯着 LibreSearch、Search-2api、Grok、Tavily、Firecrawl、Perplexity 六个服务的状态。每格代表一次自动探针（每 30 分钟一次，最多显示最近 24 小时）。平时看最近调用和日志就够，手动体检也有冷却，不会乱花额度。</p>
+              <p class="panel-note">这儿盯着 LibreSearch、Search-2api、Grok、Tavily、Firecrawl、Perplexity、Serper 七个服务的状态。每格代表一次自动探针（每 30 分钟一次，最多显示最近 24 小时）。平时看最近调用和日志就够，手动体检也有冷却，不会乱花额度。（Serper 按次计费，自动探针只做配置检查、不真发搜索。）</p>
               <div class="monitor-head">
                 <div>
-                  <strong id="monitoringCount">6</strong>
+                  <strong id="monitoringCount">7</strong>
                   <span>正在守护的服务</span>
                 </div>
                 <div class="monitor-bars" id="monitorBars"></div>

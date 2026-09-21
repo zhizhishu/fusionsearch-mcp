@@ -25,6 +25,7 @@ import {
   fetchAvailableModels,
   getFusionPublicConfig
 } from './fusionClients.js';
+import { executeSerperSearch, getSerperPublicConfig } from './serperClient.js';
 import {
   buildKeyReveal,
   buildKeyStatus,
@@ -71,6 +72,9 @@ export const DEFAULT_CONFIG = {
   tavilyMcpMapTool: '',
   firecrawlApiUrl: 'https://api.firecrawl.dev/v2',
   firecrawlApiKey: '',
+  serperEnabled: true,
+  serperApiUrl: 'https://google.serper.dev',
+  serperApiKey: '',
   hfEndpoint: 'https://huggingface.co',
   hfSpaceId: '',
   defaultParams: {
@@ -111,6 +115,8 @@ const HF_SECRET_OPTIONS = [
   { key: 'TAVILY_MCP_MAP_TOOL', label: 'Tavily MCP map tool override', multiline: false },
   { key: 'FIRECRAWL_API_URL', label: 'Firecrawl API URL', multiline: false },
   { key: 'FIRECRAWL_API_KEY', label: 'Firecrawl API key', multiline: false },
+  { key: 'SERPER_API_URL', label: 'Serper API base URL (protocol-only, no browser)', multiline: false },
+  { key: 'SERPER_API_KEY', label: 'Serper API key', multiline: false },
   { key: 'PERPLEXITY_TOKEN_CONFIG', label: 'Perplexity token config (JSON)', multiline: true },
   { key: 'RUNTIME_CONFIG_PATH', label: 'Runtime config path', multiline: false },
   { key: 'HF_WRITE_TOKEN', label: 'HF write token for future secret edits', multiline: false },
@@ -132,7 +138,8 @@ const HF_SECRET_KEYS = HF_SECRET_OPTIONS.map((item) => item.key);
 // 写入时以该 key 在 HF 上的**既有类型**为准（见 writeHfEntries），两边都没有才用下面的默认。
 const HF_VARIABLE_KEYS = new Set([
   'GROK_API_URL',
-  'GROK_MODEL'
+  'GROK_MODEL',
+  'SERPER_API_URL'
 ]);
 
 // Single source of truth for the unified key center (PUT /api/admin/keys). Maps each
@@ -155,6 +162,8 @@ const KEY_CENTER_FIELDS = {
   tavilyApiKey: { configField: 'tavilyApiKey', hfKey: 'TAVILY_API_KEY', kind: 'secret' },
   tavilyMcpToken: { configField: 'tavilyMcpToken', hfKey: 'TAVILY_MCP_TOKEN', kind: 'secret' },
   firecrawlApiKey: { configField: 'firecrawlApiKey', hfKey: 'FIRECRAWL_API_KEY', kind: 'secret' },
+  serperApiUrl: { configField: 'serperApiUrl', hfKey: 'SERPER_API_URL', kind: 'variable' },
+  serperApiKey: { configField: 'serperApiKey', hfKey: 'SERPER_API_KEY', kind: 'secret' },
   adminToken: { configField: 'adminToken', hfKey: 'ADMIN_TOKEN', kind: 'admin' },
   mcpAuthToken: { configField: 'mcpAuthToken', hfKey: 'MCP_AUTH_TOKEN', kind: 'mcp' },
   // resin 代理出口：env-only(改后写 HF Secret、需重启生效；无 runtime 热更，因 SearXNG 在 start.sh 启动注入)
@@ -234,6 +243,9 @@ const adminConfigUpdateSchema = z.object({
   firecrawlApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
   firecrawlApiKey: z.string().optional(),
   clearFirecrawlApiKey: z.boolean().optional(),
+  serperApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
+  serperApiKey: z.string().optional(),
+  clearSerperApiKey: z.boolean().optional(),
   perplexityModel: z.string().trim().optional(),
   defaultParams: adminDefaultParamsSchema.optional()
 });
@@ -2093,6 +2105,7 @@ export function createApp(userConfig = {}) {
     perplexityModel: config.perplexityModel,
     perplexityConfigured: Boolean(config.perplexityApiUrl),
     perplexityCookieConfigured: Boolean(process.env.PERPLEXITY_TOKEN_CONFIG),
+    serper: getSerperPublicConfig(config),
     runtimeConfigPath: runtimeConfigPath ?? null,
     envOverrides: {
       searchEndpoint: Boolean(process.env.SEARCH_ENDPOINT),
@@ -2110,6 +2123,8 @@ export function createApp(userConfig = {}) {
       tavilyMcpUrl: Boolean(process.env.TAVILY_MCP_URL),
       tavilyMcpToken: Boolean(process.env.TAVILY_MCP_TOKEN || process.env.TAVILY_HIKARI_TOKEN),
       firecrawlApiKey: Boolean(process.env.FIRECRAWL_API_KEY),
+      serperApiUrl: Boolean(process.env.SERPER_API_URL),
+      serperApiKey: Boolean(process.env.SERPER_API_KEY),
       perplexityApiUrl: Boolean(process.env.PERPLEXITY_API_URL),
       perplexityModel: Boolean(process.env.PERPLEXITY_MODEL),
       hfWriteToken: Boolean(process.env.HF_WRITE_TOKEN),
@@ -2157,6 +2172,8 @@ export function createApp(userConfig = {}) {
       tavilyMcpMapTool: config.tavilyMcpMapTool,
       firecrawlApiUrl: config.firecrawlApiUrl,
       firecrawlApiKey: config.firecrawlApiKey,
+      serperApiUrl: config.serperApiUrl,
+      serperApiKey: config.serperApiKey,
       perplexityModel: config.perplexityModel,
       defaultParams: config.defaultParams
     });
@@ -2694,6 +2711,10 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       config.firecrawlApiUrl = next.firecrawlApiUrl || DEFAULT_CONFIG.firecrawlApiUrl;
     }
     updateSecret(next.clearFirecrawlApiKey, next.firecrawlApiKey, 'firecrawlApiKey');
+    if (next.serperApiUrl !== undefined) {
+      config.serperApiUrl = next.serperApiUrl || DEFAULT_CONFIG.serperApiUrl;
+    }
+    updateSecret(next.clearSerperApiKey, next.serperApiKey, 'serperApiKey');
     if (next.perplexityModel !== undefined && next.perplexityModel) {
       config.perplexityModel = next.perplexityModel;
     }
@@ -2751,7 +2772,8 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       fusion: {
         grok: Boolean(config.grokApiUrl || config.grokApiKey),
         tavily: Boolean(config.tavilyApiUrl || config.tavilyApiKey || config.tavilyMcpUrl || config.tavilyMcpToken),
-        firecrawl: Boolean(config.firecrawlApiUrl || config.firecrawlApiKey)
+        firecrawl: Boolean(config.firecrawlApiUrl || config.firecrawlApiKey),
+        serper: Boolean(config.serperApiKey)
       },
       hfSync: {
         requested: hfSync.requested,
@@ -3617,6 +3639,50 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       });
     } finally {
       timeout.clear();
+    }
+  }));
+
+  app.post('/api/admin/test/serper', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
+    const query = typeof req.body?.query === 'string' && req.body.query.trim()
+      ? req.body.query.trim()
+      : 'latest AI search news';
+    try {
+      const result = await executeSerperSearch({
+        config,
+        query,
+        maxResults: 5,
+        timeoutMs: ADMIN_TEST_TIMEOUT_MS
+      });
+      const elapsed = Date.now() - startedAt;
+      monitoring.record('serper', {
+        ok: true,
+        message: 'Admin Serper 测试通过',
+        responseTimeMs: elapsed,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: true,
+        answer: result.answer,
+        credits: result.credits,
+        snippet: String(result.content || '').slice(0, 600),
+        sourceCount: Array.isArray(result.sources) ? result.sources.length : 0,
+        elapsed
+      });
+    } catch (error) {
+      monitoring.record('serper', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: false,
+        error: formatAdminTestError(
+          error,
+          error instanceof Error ? error.message : String(error)
+        )
+      });
     }
   }));
 
