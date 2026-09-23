@@ -25,15 +25,15 @@ short_description: LibreSearch, Search-2api, Grok, Tavily and Firecrawl MCP
 
 </div>
 
-FusionSearch MCP 把 **LibreSearch/SearXNG、Search-2api/search.sh、Grok(OpenAI 兼容)、Tavily、Firecrawl** 五层能力熔进同一个 MCP 服务。它不是把五个 provider 并排丢给客户端挑，而是在服务端跑一条 **Fusion Orchestrator 证据流水线**——意图识别 → 多源编排 → 证据归一 → 去重排序 → 交叉验证 → AI 合成，客户端只管拿到带来源、可追踪、交叉验证过的答案。
+FusionSearch MCP 把 **LibreSearch/SearXNG、Search-2api/search.sh、Grok(OpenAI 兼容)、Tavily、Firecrawl、Perplexity、Serper(协议版 Google SERP)** 七源熔进同一个 MCP 服务。它不是把一堆 provider 并排丢给客户端挑，而是在服务端跑一条 **Fusion Orchestrator 证据流水线**——意图识别 → 多源编排 → 证据归一 → 去重排序 → 交叉验证 → AI 合成，客户端只管拿到带来源、可追踪、交叉验证过的答案。
 
 ## ✨ 特性亮点
 
-- 🧩 **五源融合** — 网页结构化(SearXNG) + AI 答案(search.sh) + 联网搜索/抓取(Tavily) + 正文托底(Firecrawl) + 合成汇总(Grok)，一次查询自动交叉取证。
-- 🛡️ **全链路降级** — 五源各自独立、互为备胎；某一层没配或挂了，其它层照常出结果，**绝不整体失败**。
+- 🧩 **七源融合** — 网页结构化(SearXNG) + AI 答案(search.sh) + 联网搜索/抓取(Tavily) + 正文托底(Firecrawl) + 合成汇总(Grok) + Perplexity + Serper(协议版 Google SERP)，一次查询自动交叉取证。
+- 🛡️ **全链路降级** — 七源各自独立、互为备胎；某一层没配或挂了，其它层照常出结果，**绝不整体失败**。
 - 🎯 **6 个精炼工具** — 取证与编排全收进服务端 Fusion Orchestrator，客户端不必在一堆同义工具里挑（v2 从 22 精简到 6）。
 - 🚪 **统一 `/mcp` 入口** — Streamable HTTP，兼容 Cherry Studio / Claude Code / Codex；Bearer 或路径内嵌两种鉴权。
-- 🖥️ **开箱管理台** — `/admin` 一处配齐五源 Key、密钥中心 👁 明文查看/回写、五类能力测试、健康看板。
+- 🖥️ **开箱管理台** — `/admin` 一处配齐各源 Key、密钥中心 👁 明文查看/回写、分类能力测试、健康看板。
 - 🐳 **三种部署** — 轻量服务器版 / Docker Compose 多合一 / Hugging Face 单容器 Space，都是一条命令。
 
 **四个对外面**：`/`（all-in-one 下的 LibreSearch 搜索页）· `/admin`（管理台）· `/mcp`（统一 MCP）· `/search2api/v1/chat/completions`（OpenAI 兼容答案 API）。
@@ -55,7 +55,7 @@ docker compose up -d --build
 
 ### 第 2 步 · 配搜索源（都可单独用、互为备胎）
 
-进 Admin UI 对应面板填 Key。**一个都不填也能启动**，只是少一层能力；五层各自独立，某层没配或挂了其它照常出结果：
+进 Admin UI 对应面板填 Key。**一个都不填也能启动**，只是少一层能力；各源独立，某层没配或挂了其它照常出结果：
 
 | 能力 | 配什么 | 备注 |
 | --- | --- | --- |
@@ -64,6 +64,7 @@ docker compose up -d --build
 | 联网搜索 / 抓取 | Tavily（官方 REST 或第三方 MCP） | tavily.com |
 | 正文抓取托底 | Firecrawl Key | firecrawl.dev |
 | AI 汇总总结 | Grok / 任意 OpenAI-compatible URL+Key | 交叉验证后合成答案 |
+| 协议版 Google SERP | Serper `SERPER_API_KEY` | 无浏览器；按次计费，探针不真搜 |
 
 ### 第 3 步 · 接入 MCP 客户端
 
@@ -109,7 +110,7 @@ graph TD
     C["🧑‍💻 Client / LLM"] -->|"MCP: /mcp"| IR
     subgraph O["🧠 Fusion Orchestrator"]
         IR["🧭 Intent Router<br/>URL → 抓取流水线<br/>关键词/问题 → 多源研究"]
-        subgraph PR["📚 Provider Registry（五源并行取证）"]
+        subgraph PR["📚 Provider Registry（七源并行取证）"]
             L["LibreSearch / SearXNG<br/>结构化网页结果"]
             S["Search-2api / search.sh<br/>答案型搜索"]
             T["Tavily<br/>search · extract · map"]
@@ -124,7 +125,7 @@ graph TD
     SY --> C
 ```
 
-当前推荐客户端优先调用 `smart_research`、`smart_fetch` 和 `fusion_status`。`smart_research` 负责从 URL 或自然语言问题进入合适流水线；`smart_fetch` 负责 URL 抓取、降级和可选总结；`fusion_status` 负责查看 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 的健康状态与脱敏配置状态。
+当前推荐客户端优先调用 `smart_research`、`smart_fetch` 和 `fusion_status`。`smart_research` 负责从 URL 或自然语言问题进入合适流水线；`smart_fetch` 负责 URL 抓取、降级和可选总结；`fusion_status` 负责查看各源（含 Serper）的健康状态与脱敏配置状态。
 
 除三类智能工具外，还有三个配置/运维工具：`web_map`（Tavily 站点地图）、`fusion_config`（Grok/Tavily/Firecrawl 配置诊断，可选连通性测试）、`fusion_switch_model`（切换默认 Grok 模型并持久化）。工具总数从 22 精简到 6，原先重叠的 `libresearch_*` / `fusionsearch_*` 家族与单独的 provider 工具已移除，取证与编排全部收进服务端。
 
@@ -290,12 +291,12 @@ Admin UI 的 Tavily 页是二选一：`官方 REST` 显示 REST API URL/Key，`�
 
 ## 🔧 MCP 工具
 
-工具精简为 6 个。智能工具在服务端自动编排 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 五层能力并交叉取证，客户端不必在一堆同义工具里挑选：
+工具精简为 6 个。智能工具在服务端自动编排 LibreSearch、Search-2api、Grok、Tavily、Firecrawl、Perplexity、Serper 并交叉取证，客户端不必在一堆同义工具里挑选：
 
 - `smart_research`：推荐主入口。Intent Router 会先判断输入是 URL 还是关键词/问题；URL 进入抓取流水线，关键词/问题进入多源研究流水线，并尽量交叉取证后再合成答案。可用 `strategy` 选档位、`limit`（extra_sources）扩展信源。
 - `smart_fetch`：推荐网页抓取入口。按 `Tavily Extract -> Firecrawl Scrape -> HTML fetch` 顺序降级，归一化正文证据后可选让 Grok 基于抓取内容总结。
 - `web_map`：Tavily Map 探测站点结构与链接。
-- `fusion_status`：返回 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 的最近健康状态和脱敏 Key 状态。
+- `fusion_status`：返回各源最近健康状态和脱敏 Key 状态（含 Serper）。
 - `fusion_config`：Grok/Tavily/Firecrawl 配置诊断，可选实时连通性测试。
 - `fusion_switch_model`：切换默认 Grok 模型并持久化到 runtime 配置。
 
@@ -347,9 +348,9 @@ http://<host>:1666/admin
 
 All Key Control 会显示 `已配置 / 未配置`、脱敏值和来源，例如 `sk-****1234`、`cf_clearance=****; len 392`。完整 Cookie、Token、API Key 不会回显，也不会写入日志。
 
-状态页新增 `Monitoring`：按 CheckCle 式服务列表展示 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 的 `Up / Warning / Down / Paused`。它优先依赖最近 MCP 调用、Admin 测试和日志记录；主动探针有 10 分钟冷却保护，Tavily/Firecrawl 默认不主动消耗额度，只确认配置并等待真实调用刷新状态。
+状态页新增 `Monitoring`：按 CheckCle 式服务列表展示 LibreSearch、Search-2api、Grok、Tavily、Firecrawl、Perplexity、Serper 的 `Up / Warning / Down / Paused`。它优先依赖最近 MCP 调用、Admin 测试和日志记录；主动探针有冷却保护。Tavily/Firecrawl/Serper 默认不主动消耗额度，只确认配置并等待真实调用刷新状态。
 
-测试页分为 LibreSearch、Search-2api、Grok、Tavily、Firecrawl 五个标签：LibreSearch 验证 JSON 搜索；Search-2api 验证 Chat Completions 和上游维护状态；Grok 验证模型/回答；Tavily 验证 Search、Fetch、Map；Firecrawl 验证 Scrape 托底。
+测试页按源分标签：LibreSearch 验证 JSON 搜索；Search-2api 验证 Chat Completions；Grok 验证模型/回答；Tavily 验证 Search、Fetch、Map；Firecrawl 验证 Scrape 托底；Perplexity / Serper 各有连通测试（Serper 每次真搜扣 1 credit）。
 
 环境变量优先级高于 `config/runtime.json`。Key 类字段只显示“是否已配置”，不会在 API 响应或页面里回显明文。
 
@@ -441,7 +442,7 @@ FusionSearch MCP 站在这些开源项目和上游服务的肩膀上，特此致
 
 **设计灵感**
 
-- **[GrokSearch](https://linux.do/t/topic/1674101)**（作者 `GuDaStudio`，grok-with-tavily 分支）— 本项目最直接的灵感来源：Grok + Tavily + Firecrawl 的「双引擎 + 抓取降级」思路。FusionSearch 是它的**服务端超集**——把交叉验证 / 编排从客户端提示词搬进服务端 Fusion Orchestrator，并从三层扩到五层能力。
+- **[GrokSearch](https://linux.do/t/topic/1674101)**（作者 `GuDaStudio`，grok-with-tavily 分支）— 本项目最直接的灵感来源：Grok + Tavily + Firecrawl 的「双引擎 + 抓取降级」思路。FusionSearch 是它的**服务端超集**——把交叉验证 / 编排从客户端提示词搬进服务端 Fusion Orchestrator，并从三层扩到七源。
 
 **核心依赖 / 上游**
 
@@ -450,7 +451,8 @@ FusionSearch MCP 站在这些开源项目和上游服务的肩膀上，特此致
 - **[Search-2api](https://github.com/lza6/Search-2api)**（作者 `lza6`）— search.sh 的 OpenAI-compatible 封装，作为答案型搜索层内置于 `services/search2api`。
 - **[Tavily](https://tavily.com)** — 面向 AI 的搜索 / 抓取 / 站点地图 API。
 - **[Firecrawl](https://firecrawl.dev)** — 网页正文抓取，抓取降级链的一环。
-- **[perplexity-ai](https://github.com/escapeWu/perplexity-ai)**（`escapeWu`，fork of `ESousa97`，MIT）— Perplexity.ai 逆向封装(Pro 账号 cookie → OpenAI 兼容答案)，作为**可选第 6 源**内置于 `services/perplexity`，`smart_research` 并行取证时接入；未配则自动跳过、独立自重启、不影响核心五源。
+- **[perplexity-ai](https://github.com/escapeWu/perplexity-ai)**（`escapeWu`，fork of `ESousa97`，MIT）— Perplexity.ai 逆向封装(Pro 账号 cookie → OpenAI 兼容答案)，作为**可选第 6 源**内置于 `services/perplexity`，`smart_research` 并行取证时接入；未配则自动跳过、独立自重启、不影响其它源。
+- **[Serper](https://serper.dev/)** — 协议版 Google SERP（`POST https://google.serper.dev/search` + `X-API-KEY`），**第 7 源**；无浏览器。按次计费，自动探针不真搜。未配 `SERPER_API_KEY` 则静默跳过。
 - **[Grok / xAI](https://x.ai)**（或任意 OpenAI-compatible 端点）— 证据合成与汇总。
 - **[Model Context Protocol](https://modelcontextprotocol.io)** — MCP 规范与 `@modelcontextprotocol/sdk`，统一工具接入协议。
 
