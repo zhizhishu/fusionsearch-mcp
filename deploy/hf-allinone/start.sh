@@ -234,6 +234,32 @@ else
   echo "[fusionsearch] MOUNT_MAIL 未开，跳过 clawemail 邮箱服务(fusion 独立模式)"
 fi
 
+# ---- iCloud HME 引擎(可选，MOUNT_ICLOUD=on 时启用) ----
+# ClawEmail 面板的 iCloud 隐藏邮箱源：Go 单二进制，监听内部 :8081，clawemail 服务器
+# (provider endpoint=http://127.0.0.1:8081)直连调用，不经 fusion 反代、不对外暴露。
+# 独立自重启 subshell、绝不加 pids——引擎挂了自己拉起，不拖垮搜索/邮箱。
+# env 全从 Space 全局继承：GATE_PASSWORD(引擎 Basic Auth 门,用户名 claw) +
+# APPLE_ID_PASSWORD(自动登录兜底,引擎启动后自清) + SUPABASE_URL/SUPABASE_SERVICE_KEY
+# (accounts.json 冷启动恢复+防抖推送,回落 ICLOUD_SUPABASE_* 可覆盖)。
+# 数据目录 /app/icloud-hme/data 易失——冷启动时引擎自动从 Supabase 恢复账号(含 cookie/
+# trust_token)，会话活着只保活刷新(机房 IP 上 trust token 免码常被风控拒,引擎已内置
+# 先验会话再登录,不会 OTP 推送轰炸)。纯协议实现,零浏览器二进制。
+if [ "${MOUNT_ICLOUD:-}" = "on" ] || [ "${MOUNT_ICLOUD:-}" = "true" ] || [ "${MOUNT_ICLOUD:-}" = "1" ] || [ "${MOUNT_ICLOUD:-}" = "yes" ]; then
+  (
+    while :; do
+      echo "[fusionsearch] (icloud-hme) starting engine on :${ICLOUD_PORT:-8081}"
+      ( /app/icloud-hme/icloud-hme \
+          -addr "127.0.0.1:${ICLOUD_PORT:-8081}" \
+          -data "${ICLOUD_DATA_DIR:-/app/icloud-hme/data}" ) 2>&1
+      echo "[fusionsearch] (icloud-hme) exited status=$?; restart in 10s (不影响搜索/邮箱)"
+      sleep 10
+    done
+  ) &
+  echo "[fusionsearch] icloud-hme(引擎) 自重启后台已拉起(独立于搜索/邮箱)"
+else
+  echo "[fusionsearch] MOUNT_ICLOUD 未开，跳过 iCloud HME 引擎"
+fi
+
 # ---- CloudSpace 订阅栈(可选，MOUNT_SUBSTORE=on 时启用) ----
 # 合并部署时与 fusion 同容器：cloudspace 自带网关(access-proxy)监听内部 :7861，由 fusion
 # node(app.js)反代 /cloudspace/* 过来(保留 /cloudspace 前缀，网关按 CLOUDSPACE_MOUNT_PREFIX=/cloudspace
