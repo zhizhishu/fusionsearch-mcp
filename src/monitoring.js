@@ -13,6 +13,16 @@ const MONITORED_SERVICES = [
   { id: 'serper', name: 'Serper', type: 'google/serp' }
 ];
 const PROBE_COOLDOWN_MS = 10 * 60 * 1000;
+// 状态过期阈值:记录超过 24h 视为过期。过期的 up/down 一律降级 warning(待真实调用确认)——
+// 状态只由真实调用/探针刷新(调用反馈制),一次失败后无人调用不该永远装死,一次成功后
+// 长期无调用也不该永远装活。paused(未配置)不参与降级。
+const STALE_STATUS_MS = 24 * 60 * 60 * 1000;
+
+function formatStaleAge(ts) {
+  const hours = Math.max(1, Math.floor((Date.now() - ts) / 3600000));
+  if (hours < 48) return `${hours} 小时`;
+  return `${Math.floor(hours / 24)} 天`;
+}
 
 export function createMonitoringState() {
   const events = new Map();
@@ -135,8 +145,13 @@ export function buildMonitoringSnapshot(config = {}, monitor = createMonitoringS
   const services = MONITORED_SERVICES.map((service) => {
     const configured = isServiceConfigured(service.id, config, fusion, keyStatus);
     const last = monitor.get(service.id);
-    const status = last?.status || (configured ? 'warning' : 'paused');
-    const message = last?.message || (configured ? '已配置，等待最近调用或手动探针确认' : '未配置或已关闭');
+    let status = last?.status || (configured ? 'warning' : 'paused');
+    let message = last?.message || (configured ? '已配置，等待最近调用或手动探针确认' : '未配置或已关闭');
+    const lastTs = last?.checkedAt ? Date.parse(last.checkedAt) : null;
+    if (lastTs && Number.isFinite(lastTs) && Date.now() - lastTs > STALE_STATUS_MS && last.status !== 'paused') {
+      status = 'warning';
+      message = `状态已过期(${formatStaleAge(lastTs)}前的${last.status === 'up' ? '成功' : '失败'}记录),等待下次真实调用刷新`;
+    }
     const hist = monitor.getHistory(service.id);
     return {
       ...service,
