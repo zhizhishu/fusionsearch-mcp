@@ -303,7 +303,7 @@ export async function executeSmartResearch({
         provider: 'perplexity'
       })));
     }
-  } else if (!/未配置/.test(perplexity.error || '')) {
+  } else if (!isNotConfiguredError(perplexity.error)) {
     // 未配置(第6源可选)时静默跳过，不给证据流加噪声；真失败才记录
     const content = `## Perplexity\n失败: ${perplexity.error}`;
     evidence.push(content);
@@ -317,7 +317,7 @@ export async function executeSmartResearch({
     if (Array.isArray(serper.value.sources) && serper.value.sources.length) {
       sourceGroups.push(serper.value.sources);
     }
-  } else if (!/未配置/.test(serper.error || '')) {
+  } else if (!isNotConfiguredError(serper.error)) {
     const content = `## Serper\n失败: ${serper.error}`;
     evidence.push(content);
     evidenceBlocks.push({ provider: 'serper', title: 'Serper error', content });
@@ -330,7 +330,7 @@ export async function executeSmartResearch({
     if (Array.isArray(exa.value.sources) && exa.value.sources.length) {
       sourceGroups.push(exa.value.sources);
     }
-  } else if (!/未配置/.test(exa.error || '')) {
+  } else if (!isNotConfiguredError(exa.error)) {
     const content = `## Exa\n失败: ${exa.error}`;
     evidence.push(content);
     evidenceBlocks.push({ provider: 'exa', title: 'Exa error', content });
@@ -810,8 +810,15 @@ function formatAttempts(attempts = []) {
 }
 
 function isNotConfiguredError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /未配置|not configured|已关闭|disabled|missing key|missing token/iu.test(message);
+  const message = (error instanceof Error ? error.message : String(error || '')).trim();
+  // 带上游响应体的真故障（Exa HTTP 500: ...）先判否：不能因为 body 里恰好出现
+  // 「未配置」或 "not configured" 就被当成"没配"而静默吞掉。
+  if (/\bHTTP\s+\d{3}\b/u.test(message)) return false;
+  // 其余含「未配置」的一律视为没配。文案有两种写法，都要认：
+  //   前缀式：未配置 EXA_API_KEY，跳过 Exa
+  //   尾巴式：Grok API URL 未配置 / Tavily REST Key 或 MCP Token 未配置
+  if (/未配置/u.test(message)) return true;
+  return /not configured|已关闭|disabled|missing key|missing token/iu.test(message);
 }
 
 function recordMonitor(monitor, providerId, event) {

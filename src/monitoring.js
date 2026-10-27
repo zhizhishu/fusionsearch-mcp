@@ -463,7 +463,8 @@ async function probeExa(config, monitor) {
   });
 }
 
-async function fetchWithTimeout(url, { headers, timeoutMs = 8000 } = {}) {  const controller = new AbortController();
+async function fetchWithTimeout(url, { headers, timeoutMs = 8000 } = {}) {
+  const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
