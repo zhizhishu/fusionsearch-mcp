@@ -26,6 +26,7 @@ import {
   getFusionPublicConfig
 } from './fusionClients.js';
 import { executeSerperSearch, getSerperPublicConfig } from './serperClient.js';
+import { executeExaSearch, getExaPublicConfig } from './exaClient.js';
 import {
   buildKeyReveal,
   buildKeyStatus,
@@ -75,6 +76,9 @@ export const DEFAULT_CONFIG = {
   serperEnabled: true,
   serperApiUrl: 'https://google.serper.dev',
   serperApiKey: '',
+  exaEnabled: true,
+  exaApiUrl: 'https://api.exa.ai',
+  exaApiKey: '',
   hfEndpoint: 'https://huggingface.co',
   hfSpaceId: '',
   defaultParams: {
@@ -117,6 +121,8 @@ const HF_SECRET_OPTIONS = [
   { key: 'FIRECRAWL_API_KEY', label: 'Firecrawl API key', multiline: false },
   { key: 'SERPER_API_URL', label: 'Serper API base URL (protocol-only, no browser)', multiline: false },
   { key: 'SERPER_API_KEY', label: 'Serper API key', multiline: false },
+  { key: 'EXA_API_URL', label: 'Exa API base URL (protocol-only semantic search)', multiline: false },
+  { key: 'EXA_API_KEY', label: 'Exa API key', multiline: false },
   { key: 'PERPLEXITY_TOKEN_CONFIG', label: 'Perplexity token config (JSON)', multiline: true },
   { key: 'RUNTIME_CONFIG_PATH', label: 'Runtime config path', multiline: false },
   { key: 'HF_WRITE_TOKEN', label: 'HF write token for future secret edits', multiline: false },
@@ -139,7 +145,8 @@ const HF_SECRET_KEYS = HF_SECRET_OPTIONS.map((item) => item.key);
 const HF_VARIABLE_KEYS = new Set([
   'GROK_API_URL',
   'GROK_MODEL',
-  'SERPER_API_URL'
+  'SERPER_API_URL',
+  'EXA_API_URL'
 ]);
 
 // Single source of truth for the unified key center (PUT /api/admin/keys). Maps each
@@ -164,6 +171,8 @@ const KEY_CENTER_FIELDS = {
   firecrawlApiKey: { configField: 'firecrawlApiKey', hfKey: 'FIRECRAWL_API_KEY', kind: 'secret' },
   serperApiUrl: { configField: 'serperApiUrl', hfKey: 'SERPER_API_URL', kind: 'variable' },
   serperApiKey: { configField: 'serperApiKey', hfKey: 'SERPER_API_KEY', kind: 'secret' },
+  exaApiUrl: { configField: 'exaApiUrl', hfKey: 'EXA_API_URL', kind: 'variable' },
+  exaApiKey: { configField: 'exaApiKey', hfKey: 'EXA_API_KEY', kind: 'secret' },
   adminToken: { configField: 'adminToken', hfKey: 'ADMIN_TOKEN', kind: 'admin' },
   mcpAuthToken: { configField: 'mcpAuthToken', hfKey: 'MCP_AUTH_TOKEN', kind: 'mcp' },
   // resin 代理出口：env-only(改后写 HF Secret、需重启生效；无 runtime 热更，因 SearXNG 在 start.sh 启动注入)
@@ -246,6 +255,9 @@ const adminConfigUpdateSchema = z.object({
   serperApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
   serperApiKey: z.string().optional(),
   clearSerperApiKey: z.boolean().optional(),
+  exaApiUrl: z.union([z.string().trim().url(), z.literal('')]).optional(),
+  exaApiKey: z.string().optional(),
+  clearExaApiKey: z.boolean().optional(),
   perplexityModel: z.string().trim().optional(),
   defaultParams: adminDefaultParamsSchema.optional()
 });
@@ -2106,6 +2118,7 @@ export function createApp(userConfig = {}) {
     perplexityConfigured: Boolean(config.perplexityApiUrl),
     perplexityCookieConfigured: Boolean(process.env.PERPLEXITY_TOKEN_CONFIG),
     serper: getSerperPublicConfig(config),
+    exa: getExaPublicConfig(config),
     runtimeConfigPath: runtimeConfigPath ?? null,
     envOverrides: {
       searchEndpoint: Boolean(process.env.SEARCH_ENDPOINT),
@@ -2125,6 +2138,8 @@ export function createApp(userConfig = {}) {
       firecrawlApiKey: Boolean(process.env.FIRECRAWL_API_KEY),
       serperApiUrl: Boolean(process.env.SERPER_API_URL),
       serperApiKey: Boolean(process.env.SERPER_API_KEY),
+      exaApiUrl: Boolean(process.env.EXA_API_URL),
+      exaApiKey: Boolean(process.env.EXA_API_KEY),
       perplexityApiUrl: Boolean(process.env.PERPLEXITY_API_URL),
       perplexityModel: Boolean(process.env.PERPLEXITY_MODEL),
       hfWriteToken: Boolean(process.env.HF_WRITE_TOKEN),
@@ -2174,6 +2189,8 @@ export function createApp(userConfig = {}) {
       firecrawlApiKey: config.firecrawlApiKey,
       serperApiUrl: config.serperApiUrl,
       serperApiKey: config.serperApiKey,
+      exaApiUrl: config.exaApiUrl,
+      exaApiKey: config.exaApiKey,
       perplexityModel: config.perplexityModel,
       defaultParams: config.defaultParams
     });
@@ -2715,6 +2732,10 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
       config.serperApiUrl = next.serperApiUrl || DEFAULT_CONFIG.serperApiUrl;
     }
     updateSecret(next.clearSerperApiKey, next.serperApiKey, 'serperApiKey');
+    if (next.exaApiUrl !== undefined) {
+      config.exaApiUrl = next.exaApiUrl || DEFAULT_CONFIG.exaApiUrl;
+    }
+    updateSecret(next.clearExaApiKey, next.exaApiKey, 'exaApiKey');
     if (next.perplexityModel !== undefined && next.perplexityModel) {
       config.perplexityModel = next.perplexityModel;
     }
@@ -2773,7 +2794,8 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
         grok: Boolean(config.grokApiUrl || config.grokApiKey),
         tavily: Boolean(config.tavilyApiUrl || config.tavilyApiKey || config.tavilyMcpUrl || config.tavilyMcpToken),
         firecrawl: Boolean(config.firecrawlApiUrl || config.firecrawlApiKey),
-        serper: Boolean(config.serperApiKey)
+        serper: Boolean(config.serperApiKey),
+        exa: Boolean(config.exaApiKey)
       },
       hfSync: {
         requested: hfSync.requested,
@@ -3686,10 +3708,52 @@ document.getElementById('all').addEventListener('click',function(){var lines=[].
     }
   }));
 
+  app.post('/api/admin/test/exa', auth.requireAdmin, asyncHandler(async (req, res) => {
+    const startedAt = Date.now();
+    const query = typeof req.body?.query === 'string' && req.body.query.trim()
+      ? req.body.query.trim()
+      : 'latest AI search news';
+    try {
+      const result = await executeExaSearch({
+        config,
+        query,
+        maxResults: 5,
+        timeoutMs: ADMIN_TEST_TIMEOUT_MS
+      });
+      const elapsed = Date.now() - startedAt;
+      monitoring.record('exa', {
+        ok: true,
+        message: 'Admin Exa 测试通过',
+        responseTimeMs: elapsed,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: true,
+        costDollars: result.costDollars,
+        snippet: String(result.content || '').slice(0, 600),
+        sourceCount: Array.isArray(result.sources) ? result.sources.length : 0,
+        elapsed
+      });
+    } catch (error) {
+      monitoring.record('exa', {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        responseTimeMs: Date.now() - startedAt,
+        source: 'admin-test'
+      });
+      res.json({
+        ok: false,
+        error: formatAdminTestError(
+          error,
+          error instanceof Error ? error.message : String(error)
+        )
+      });
+    }
+  }));
+
   app.use('/api/admin', (error, _req, res, _next) => {
     sendAdminError(error, res);
   });
-
   const streamableSessions = new Map();
   const sseSessions = new Map();
 

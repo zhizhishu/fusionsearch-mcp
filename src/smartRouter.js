@@ -6,6 +6,7 @@ import {
   executeTavilySearchOnly
 } from './fusionClients.js';
 import { executeSerperSearch } from './serperClient.js';
+import { executeExaSearch } from './exaClient.js';
 import {
   buildEvidencePipeline,
   buildFetchSynthesisPrompt,
@@ -236,7 +237,7 @@ export async function executeSmartResearch({
     }
   };
 
-  const [libre, search2api, tavily, perplexity, serper] = await Promise.all([
+  const [libre, search2api, tavily, perplexity, serper, exa] = await Promise.all([
     run('libresearch', 'LibreSearch 搜索', async () => {
       const { payload, params } = await executeSearch({
         endpoint: config.searchEndpoint,
@@ -254,7 +255,8 @@ export async function executeSmartResearch({
     run('search2api', 'Search-2api 答案', () => callSearch2Api(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 90_000) })),
     run('tavily', 'Tavily Search', () => executeTavilySearchOnly({ config, query, maxResults: effectiveLimit })),
     run('perplexity', 'Perplexity 答案', () => callPerplexity(config, { prompt: query, timeoutMs: Math.min(timeoutMs, 60_000) })),
-    run('serper', 'Serper Google SERP', () => executeSerperSearch({ config, query, maxResults: effectiveLimit, timeoutMs: Math.min(timeoutMs, 20_000) }))
+    run('serper', 'Serper Google SERP', () => executeSerperSearch({ config, query, maxResults: effectiveLimit, timeoutMs: Math.min(timeoutMs, 20_000) })),
+    run('exa', 'Exa 语义检索', () => executeExaSearch({ config, query, maxResults: effectiveLimit, timeoutMs: Math.min(timeoutMs, 20_000) }))
   ]);
 
   if (libre.ok) {
@@ -319,6 +321,19 @@ export async function executeSmartResearch({
     const content = `## Serper\n失败: ${serper.error}`;
     evidence.push(content);
     evidenceBlocks.push({ provider: 'serper', title: 'Serper error', content });
+  }
+
+  if (exa.ok) {
+    const content = exa.value.content;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'exa', title: 'Exa semantic results', content });
+    if (Array.isArray(exa.value.sources) && exa.value.sources.length) {
+      sourceGroups.push(exa.value.sources);
+    }
+  } else if (!/未配置/.test(exa.error || '')) {
+    const content = `## Exa\n失败: ${exa.error}`;
+    evidence.push(content);
+    evidenceBlocks.push({ provider: 'exa', title: 'Exa error', content });
   }
 
   let sources = mergeSources(...sourceGroups).slice(0, Math.max(effectiveLimit, 1) * 2);

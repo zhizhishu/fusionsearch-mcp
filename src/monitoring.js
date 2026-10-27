@@ -1,6 +1,7 @@
 import { executeSearch } from './searchClient.js';
 import { fetchAvailableModels, getFusionPublicConfig, resolveFusionConfig, executeTavilySearchOnly, executeFirecrawlFetch } from './fusionClients.js';
 import { getSerperPublicConfig } from './serperClient.js';
+import { getExaPublicConfig } from './exaClient.js';
 import { logEvent } from './logger.js';
 
 const MONITORED_SERVICES = [
@@ -10,7 +11,8 @@ const MONITORED_SERVICES = [
   { id: 'tavily', name: 'Tavily', type: 'search/fetch/map' },
   { id: 'firecrawl', name: 'Firecrawl', type: 'scrape/api' },
   { id: 'perplexity', name: 'Perplexity', type: 'ai/chat' },
-  { id: 'serper', name: 'Serper', type: 'google/serp' }
+  { id: 'serper', name: 'Serper', type: 'google/serp' },
+  { id: 'exa', name: 'Exa', type: 'semantic/search' }
 ];
 const PROBE_COOLDOWN_MS = 10 * 60 * 1000;
 // 状态过期阈值:记录超过 24h 视为过期。过期的 up/down 一律降级 warning(待真实调用确认)——
@@ -98,6 +100,8 @@ export function buildKeyStatus(config = {}) {
     secretStatus('firecrawlApiKey', 'Firecrawl Key', fusion.firecrawlApiKey, ['FIRECRAWL_API_KEY']),
     endpointStatus('serperApiUrl', 'Serper API URL', config.serperApiUrl, ['SERPER_API_URL']),
     secretStatus('serperApiKey', 'Serper API Key', config.serperApiKey, ['SERPER_API_KEY']),
+    endpointStatus('exaApiUrl', 'Exa API URL', config.exaApiUrl, ['EXA_API_URL']),
+    secretStatus('exaApiKey', 'Exa API Key', config.exaApiKey, ['EXA_API_KEY']),
     secretStatus('adminToken', 'Admin Token', config.adminToken, ['ADMIN_TOKEN']),
     secretStatus('mcpAuthToken', 'MCP Token', config.mcpAuthToken, ['MCP_AUTH_TOKEN']),
     // resin 代理出口(env-only,改后需重启生效)——masked 只显示平台名+出口数,不露 token
@@ -131,6 +135,8 @@ export function buildKeyReveal(config = {}) {
     firecrawlApiKey: pick(['FIRECRAWL_API_KEY'], fusion.firecrawlApiKey),
     serperApiUrl: pick(['SERPER_API_URL'], config.serperApiUrl),
     serperApiKey: pick(['SERPER_API_KEY'], config.serperApiKey),
+    exaApiUrl: pick(['EXA_API_URL'], config.exaApiUrl),
+    exaApiKey: pick(['EXA_API_KEY'], config.exaApiKey),
     adminToken: pick(['ADMIN_TOKEN'], config.adminToken),
     mcpAuthToken: pick(['MCP_AUTH_TOKEN'], config.mcpAuthToken),
     search2apiBaseUrl: pick(['SEARCH_SH_BASE_URL'], ''),
@@ -207,7 +213,8 @@ export async function runMonitoringProbe({ config, monitor, force = false }) {
     probeTavily(config, state),
     probeFirecrawl(config, state),
     probePerplexity(config, state),
-    probeSerper(config, state)
+    probeSerper(config, state),
+    probeExa(config, state)
   ]);
 
   return {
@@ -265,6 +272,7 @@ function isServiceConfigured(id, config, fusion, keyStatus) {
   if (id === 'firecrawl') return Boolean(fusion.hasFirecrawlApiKey);
   if (id === 'perplexity') return Boolean(config.perplexityApiUrl);
   if (id === 'serper') return Boolean(getSerperPublicConfig(config).hasSerperAccess);
+  if (id === 'exa') return Boolean(getExaPublicConfig(config).hasExaAccess);
   return false;
 }
 
@@ -440,8 +448,22 @@ async function probeSerper(config, monitor) {
   });
 }
 
-async function fetchWithTimeout(url, { headers, timeoutMs = 8000 } = {}) {
-  const controller = new AbortController();
+// Exa 同 Serper 纪律：按量计费（$10 免费额度、每次搜索约 $0.007），自动探针只做配置检查，
+// 真连通性走 admin 手动「测试连通」(POST /api/admin/test/exa)。
+async function probeExa(config, monitor) {
+  const exa = getExaPublicConfig(config);
+  if (!exa.hasExaAccess) {
+    monitor.record('exa', { status: 'paused', message: 'Exa 未配置 API Key', source: 'probe' });
+    return;
+  }
+  monitor.record('exa', {
+    status: 'up',
+    message: 'Exa 已配置（配置检查，未真发搜索；连通性请点「测试连通」）',
+    source: 'probe'
+  });
+}
+
+async function fetchWithTimeout(url, { headers, timeoutMs = 8000 } = {}) {  const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {

@@ -84,6 +84,12 @@ const { app, monitoring } = createApp({
       : runtimeConfig.serperEnabled,
   serperApiUrl: process.env.SERPER_API_URL ?? runtimeConfig.serperApiUrl,
   serperApiKey: process.env.SERPER_API_KEY ?? runtimeConfig.serperApiKey,
+  exaEnabled:
+    process.env.EXA_ENABLED !== undefined
+      ? ['true', '1', 'yes'].includes(process.env.EXA_ENABLED.toLowerCase())
+      : runtimeConfig.exaEnabled,
+  exaApiUrl: process.env.EXA_API_URL ?? runtimeConfig.exaApiUrl,
+  exaApiKey: process.env.EXA_API_KEY ?? runtimeConfig.exaApiKey,
   hfEndpoint: process.env.HF_ENDPOINT ?? runtimeConfig.hfEndpoint,
   hfSpaceId: process.env.HF_SPACE_ID ?? process.env.SPACE_ID ?? runtimeConfig.hfSpaceId,
   logDir: process.env.LOG_DIR ?? runtimeConfig.logDir,

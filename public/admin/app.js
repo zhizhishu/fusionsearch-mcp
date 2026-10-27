@@ -78,6 +78,9 @@ const fields = {
   serperApiUrl: $('#serperApiUrl'),
   serperConfiguredState: $('#serperConfiguredState'),
   serperTestHint: $('#serperTestHint'),
+  exaApiUrl: $('#exaApiUrl'),
+  exaConfiguredState: $('#exaConfiguredState'),
+  exaTestHint: $('#exaTestHint'),
   perplexityModelSelect: $('#perplexityModelSelect'),
   perplexityModelHint: $('#perplexityModelHint'),
   perplexityCookieInput: $('#perplexityCookieInput'),
@@ -346,6 +349,8 @@ const KEY_CENTER_META = {
   firecrawlApiKey: { editable: true, hf: true, clear: true },
   serperApiUrl: { editable: true, hf: true, clear: false, plain: true, note: 'HF Variables · 默认 https://google.serper.dev，一般不用改' },
   serperApiKey: { editable: true, hf: true, clear: true, note: 'HF Secret · serper.dev 注册后获取；按次计费（注册送 2500 次）' },
+  exaApiUrl: { editable: true, hf: true, clear: false, plain: true, note: 'HF Variables · 默认 https://api.exa.ai，一般不用改' },
+  exaApiKey: { editable: true, hf: true, clear: true, note: 'HF Secret · dashboard.exa.ai 获取；按量计费（注册送 $10）' },
   adminToken: { editable: true, hf: true, clear: false, note: '改后需用新口令重新登录' },
   mcpAuthToken: { editable: true, hf: true, clear: true },
   // resin 代理出口(env-only)：存后需重启生效；masked 只显示平台名+出口数(如 HighPurity ×15)
@@ -654,6 +659,12 @@ async function loadConfig() {
   if (fields.serperConfiguredState) {
     fields.serperConfiguredState.textContent = config.serper?.hasSerperAccess ? '已配置' : '未配置';
   }
+  if (fields.exaApiUrl) {
+    fields.exaApiUrl.value = config.exa?.exaApiUrl || 'https://api.exa.ai';
+  }
+  if (fields.exaConfiguredState) {
+    fields.exaConfiguredState.textContent = config.exa?.hasExaAccess ? '已配置' : '未配置';
+  }
   if (fields.perplexityModelSelect && config.perplexityModel) {
     fields.perplexityModelSelect.value = config.perplexityModel;
   }
@@ -687,6 +698,7 @@ async function saveConfig() {
     tavilyMcpMapTool: fields.tavilyMcpMapTool.value.trim(),
     firecrawlApiUrl: fields.firecrawlApiUrl.value.trim(),
     serperApiUrl: fields.serperApiUrl?.value.trim() || '',
+    exaApiUrl: fields.exaApiUrl?.value.trim() || '',
     perplexityModel: fields.perplexityModelSelect?.value.trim() || undefined,
     defaultParams: {
       categories: fields.categories.value,
@@ -1139,6 +1151,28 @@ async function testSerper() {
   setStatus(payload.ok ? 'Serper 正常' : 'Serper 异常', payload.ok ? 'ok' : 'fail');
 }
 
+async function testExa() {
+  if (fields.exaTestHint) fields.exaTestHint.textContent = '测试中';
+  renderOutput('Exa 连通测试中（约 $0.007）...');
+  const query = $('#testExaQuery')?.value.trim() || 'latest AI search news';
+  const payload = await requestJson('/api/admin/test/exa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query })
+  });
+  const costNote = payload.costDollars !== null && payload.costDollars !== undefined ? ` · $${payload.costDollars}` : '';
+  const hint = payload.ok
+    ? `通过 · ${payload.sourceCount} 条 · ${payload.elapsed}ms${costNote}`
+    : `失败：${payload.error?.message || '未知错误'}`;
+  if (fields.exaTestHint) fields.exaTestHint.textContent = hint;
+  const testsHint = $('#exaTestFromTestsHint');
+  if (testsHint) testsHint.textContent = hint;
+  renderOutput(payload.ok
+    ? { ok: true, sourceCount: payload.sourceCount, costDollars: payload.costDollars, elapsed: payload.elapsed, snippet: payload.snippet }
+    : payload.error);
+  setStatus(payload.ok ? 'Exa 正常' : 'Exa 异常', payload.ok ? 'ok' : 'fail');
+}
+
 async function listGrokModels() {
   renderOutput('读取 Grok 模型中...');
   const payload = await requestJson('/api/admin/fusion/models');
@@ -1207,6 +1241,8 @@ bindAction('#testPerplexity', testPerplexity);
 bindAction('#testPerplexityFromTests', testPerplexity);
 bindAction('#testSerper', testSerper);
 bindAction('#testSerperFromTests', testSerper);
+bindAction('#testExa', testExa);
+bindAction('#testExaFromTests', testExa);
 bindAction('#resetGrokPrompt', async () => {
   fields.grokSystemPrompt.value = defaultGrokSystemPrompt;
   fields.saveHint.textContent = '提示词已恢复，保存后生效';
